@@ -1,0 +1,18 @@
+#!/usr/local/bin/bash
+
+#SBATCH -A  s1147
+#SBATCH -J  LIS7-CLM2
+#SBATCH -N  4
+#SBATCH --ntasks-per-node 28
+#SBATCH --constraint=hasw
+#SBATCH -t 0:25:00
+#SBATCH --time-min=0:25:00
+#SBATCH --mail-type=ALL
+
+
+ulimit -s unlimited
+
+mpirun -np 4 ./LIS 
+
+
+
