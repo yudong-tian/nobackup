@@ -27,13 +27,15 @@ dimensions:
         east_west_GDAS_T1534 = 3072 ;
         north_south_GDAS_T1534 = 1536 ;
         month = 12 ;
-        time = 1 ;
-        sfctypes = 14 ;
+        time = 12 ;
+        sfctypes = 36 ;
         soilfracbins = 1 ;
         elevbins = 1 ;
 
         ncorners = 4; 
 
+        lsmlon = 288 ;
+        lsmlat = 192 ;
 	nglcec = 10 ;
 	nglcecp1 = 11 ;
 	numurbl = 3 ;
@@ -44,7 +46,6 @@ dimensions:
 	lsmpft = 17 ;
 
 variables:
-        float time(month) ;
 EOF
 
 cat domain.vars.txt | while read var; do
@@ -65,9 +66,32 @@ cat domain.vars.txt | while read var; do
 EOF1
 done
 
+cat >> $cdlf <<EOFa
+        float SURFACETYPE(sfctypes, north_south, east_west) ;
+                SURFACETYPE:standard_name = "Surface type" ;
+                SURFACETYPE:units = "-" ;
+                SURFACETYPE:scale_factor = 1.f ;
+                SURFACETYPE:add_offset = 0.f ;
+                SURFACETYPE:missing_value = -9999.f ;
+                SURFACETYPE:vmin = 0.f ;
+                SURFACETYPE:vmax = 0.f ;
+                SURFACETYPE:num_bins = 36 ;
+        float LANDCOVER(sfctypes, north_south, east_west) ;
+                LANDCOVER:standard_name = "AVHRR UMD landcover map" ;
+                LANDCOVER:units = "" ;
+                LANDCOVER:scale_factor = 1.f ;
+                LANDCOVER:add_offset = 0.f ;
+                LANDCOVER:missing_value = -9999.f ;
+                LANDCOVER:vmin = 0.f ;
+                LANDCOVER:vmax = 0.f ;
+                LANDCOVER:num_bins = 36 ;
+EOFa
+
 cat surfdata.vars.txt | while read var; do
 
-  newvar=`echo $var | sed 's/lsmlon/east_west/g' |sed 's/lsmlat/north_south/g' |sed 's/time/month/g' ` 
+  #newvar=`echo $var | sed 's/lsmlon/east_west/g' |sed 's/lsmlat/north_south/g' |sed 's/time/month/g' ` 
+  # do not translate dimension names for surfvariables 
+  newvar=$var 
   varname=`echo $newvar | sed 's/[,();]/ /g' | awk '{print \$2}'`
 
   cat >> $cdlf <<EOF2
@@ -166,14 +190,14 @@ cat >> $cdlf <<EOF3
                 :DI_GDAS_T1534 = 0.1171875f ;
                 :N_GDAS_T1534 = 768.f ;
 		:INC_WATER_PTS = "false" ;
-		:LANDCOVER_SCHEME = "UMD" ;
-		:BARESOILCLASS = 12 ;
-		:URBANCLASS = 13 ;
+		:LANDCOVER_SCHEME = "CESM" ;
+		:BARESOILCLASS = 1 ;
+		:URBANCLASS = 0 ;
 		:SNOWCLASS = 0 ;
-		:WATERCLASS = 14 ;
+		:WATERCLASS = 36 ;
 		:WETLANDCLASS = 0 ;
 		:GLACIERCLASS = 0 ;
-		:NUMVEGTYPES = 13 ;
+		:NUMVEGTYPES = 35 ;
 		:LANDMASK_SOURCE = "AVHRR" ;
 		:SFCMODELS = "CLM.4.5" ;
 		:SOILTEXT_SCHEME = "Soil texture not selected" ;
@@ -187,7 +211,7 @@ data:
 
  mxsoil_color = 20 ;
 
- month = 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 ;
+ time = 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 ;
 
 }
 EOF3
