@@ -62,8 +62,65 @@ module clm45_lsmMod
 !-----------------------------------------------------------------------------
 ! !PUBLIC TYPES:
 !-----------------------------------------------------------------------------
+  public :: clm45_domain 
   public :: clm45_struc
+
 !EOP
+
+ type, public :: clm45_domain_dec 
+    
+! !PRIVATE TYPES:
+  private  ! (now mostly public for decompinitmod)
+
+  integer,public :: nclumps     ! total number of clumps across all processors
+  integer,public :: numg        ! total number of gridcells on all procs
+  integer,public :: numl        ! total number of landunits on all procs
+  integer,public :: numc        ! total number of columns on all procs
+  integer,public :: nump        ! total number of pfts on all procs
+
+  !---global information on each pe
+  type processor_type
+     integer :: nclumps          ! number of clumps for processor_type iam
+     integer,pointer :: cid(:)   ! clump indices
+     integer :: ncells           ! number of gridcells in proc
+     integer :: nlunits          ! number of landunits in proc
+     integer :: ncols            ! number of columns in proc
+     integer :: npfts            ! number of pfts in proc
+     integer :: begg, endg       ! beginning and ending gridcell index
+     integer :: begl, endl       ! beginning and ending landunit index
+     integer :: begc, endc       ! beginning and ending column index
+     integer :: begp, endp       ! beginning and ending pft index
+  end type processor_type
+  public processor_type
+  type(processor_type),public :: procinfo
+
+  !---global information on each pe
+  type clump_type
+     integer :: owner            ! process id owning clump
+     integer :: ncells           ! number of gridcells in clump
+     integer :: nlunits          ! number of landunits in clump
+     integer :: ncols            ! number of columns in clump
+     integer :: npfts            ! number of pfts in clump
+     integer :: begg, endg       ! beginning and ending gridcell index
+     integer :: begl, endl       ! beginning and ending landunit index
+     integer :: begc, endc       ! beginning and ending column index
+     integer :: begp, endp       ! beginning and ending pft index
+  end type clump_type
+  public clump_type
+  type(clump_type),public, allocatable :: clumps(:)
+
+  type decomp_type
+     integer,pointer :: glo2gdc(:)    ! 1d glo to 1d gdc
+     integer,pointer :: gdc2glo(:)    ! 1d gdc to 1d glo
+  end type decomp_type
+  public decomp_type
+  type(decomp_type),public,target :: ldecomp
+
+end type clm45_domain_dec
+
+type(clm45_domain_dec), allocatable :: clm45_domain(:)   ! nnest copies 
+
+
   type, public :: clm45_type_dec
      character*100 :: clm_rfile
      character*100 :: clm_vfile
@@ -232,6 +289,7 @@ contains
                                  
 
 
+   allocate(clm45_domain(LIS_rc%nnest))
    allocate(clm45_struc(LIS_rc%nnest))
 
    call clm45_readcrd()
@@ -241,9 +299,15 @@ contains
     call clm_varcon_init()   ! physical constants and thickness of vertical levels 
 
    do n = 1, LIS_rc%nnest
-      allocate(clm45_struc(n)%clm45(LIS_rc%npatch(n,LIS_rc%lsm_index)))
 
-      call clm45_lsm_init(n)
+      ! translate LIS decomposed domain into CLM45 domain
+      call clm45_domain_init(n)
+
+      ! allocate all the data structures for each nest
+      !call init_energy_balance_type(begp, endp, clm45_struc(n)%pebal)
+      !call init_energy_balance_type(begc, endc, clm45_struc(n)%cebal)
+      ! ...
+
       call clm45_lsm_init(n)
 
 !------------------------------------------------------------------------
@@ -274,6 +338,93 @@ contains
    enddo
   
   end subroutine clm45_lsm_ini
+
+!BOP
+!
+! !ROUTINE: clm45_domain_init
+! \label{clm45_domain_init}
+!
+! !INTERFACE:
+  subroutine clm45_domain_init(n)
+! !USES:
+    use LIS_coreMod, only : LIS_rc
+    use LIS_precisionMod
+! !DESCRIPTION:
+!
+! Initializes clm45 domain for nest n 
+!
+!  The arguments are:
+! \begin{description}
+!  \item[n]
+!   index of the nest
+! \end{description}
+!EOP
+    integer :: k, n, nclumps 
+    integer :: ier, ip, cid 
+    integer, parameter :: clump_pproc = 1
+
+    ! with clump_pproc = 1, nclumps = LIS_npes; cid ranges from 1 ... LIS_npes, 
+    ! with corresponding owner ranging from 0 ... LIS_npes-1 (pid)
+
+    nclumps = clump_pproc * LIS_npes
+
+    allocate(clm45_domain(n)%procinfo%cid(clump_pproc), stat=ier)
+
+    clm45_domain(n)%procinfo%nclumps = clump_pproc
+    clm45_domain(n)%procinfo%cid(:)  = -1
+    clm45_domain(n)%procinfo%ncells  = 0
+    clm45_domain(n)%procinfo%nlunits = 0
+    clm45_domain(n)%procinfo%ncols   = 0
+    clm45_domain(n)%procinfo%npfts   = 0
+    clm45_domain(n)%procinfo%begg    = 1
+    clm45_domain(n)%procinfo%begl    = 1
+    clm45_domain(n)%procinfo%begc    = 1
+    clm45_domain(n)%procinfo%begp    = 1
+    clm45_domain(n)%procinfo%endg    = 0
+    clm45_domain(n)%procinfo%endl    = 0
+    clm45_domain(n)%procinfo%endc    = 0
+    clm45_domain(n)%procinfo%endp    = 0
+
+    allocate(clm45_domain(n)%clumps(nclumps), stat=ier)
+
+    clm45_domain(n)%clumps(:)%owner   = -1
+    clm45_domain(n)%clumps(:)%ncells  = 0
+    clm45_domain(n)%clumps(:)%nlunits = 0
+    clm45_domain(n)%clumps(:)%ncols   = 0
+    clm45_domain(n)%clumps(:)%npfts   = 0
+    clm45_domain(n)%clumps(:)%begg    = 1
+    clm45_domain(n)%clumps(:)%begl    = 1
+    clm45_domain(n)%clumps(:)%begc    = 1
+    clm45_domain(n)%clumps(:)%begp    = 1
+    clm45_domain(n)%clumps(:)%endg    = 0
+    clm45_domain(n)%clumps(:)%endl    = 0
+    clm45_domain(n)%clumps(:)%endc    = 0
+    clm45_domain(n)%clumps(:)%endp    = 0
+
+    Do ip = 0, LIS_npes-1 
+       cid = ip+1
+       clm45_domain(n)%clumps(cid)%owner   = ip 
+       clm45_domain(n)%procinfo%cid(clump_pproc)  = cid 
+    End Do 
+
+    cid = LIS_localPet + 1
+    ! cpu-local 
+    if ( clm45_domain(n)%clumps(cid)%owner == LIS_localPet ) then 
+       clm45_domain(n)%procinfo%ncells  = LIS_ngrids(n, LIS_localPet)
+       clm45_domain(n)%procinfo%begg = 1    ! pe-local, every one starts from 1
+       clm45_domain(n)%procinfo%endg = LIS_ngrids(n, LIS_localPet)   
+    end if 
+
+    ! across cpu
+    Do ip = 0, LIS_npes-1 
+       cid = ip+1
+       clm45_domain(n)%clumps(cid)%ncells  =  LIS_ngrids(n, ip) 
+       clm45_domain(n)%clumps(cid)%begg  =  1 
+       clm45_domain(n)%clumps(cid)%endg  =  LIS_ngrids(n, ip) 
+    End Do 
+
+ end subroutine clm45_domain_init
+
 
 !BOP
 !
