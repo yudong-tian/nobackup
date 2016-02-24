@@ -30,6 +30,7 @@ module clm45_lsmMod
 ! !REVISION HISTORY:
 !    Apr 2003; Sujay Kumar, Initial Code
 ! 23 Oct 2007; Kristi Arsenault, Updated for V5.0
+! 24 Feb 2016; Yudong Tian, initial implementation of clm4.5 without nesting support. 
 !
 ! !USES:        
 
@@ -40,12 +41,10 @@ module clm45_lsmMod
     use clm_varcon      , only : clm_varcon_init
     use clm_varctl      , only : fsurdat, fatmlndfrc, flndtopo, fglcmask, noland
     use pftvarcon       , only : pftconrd
+    use clm_atmlnd   ,   only : atm2lnd_type 
     use decompInitMod   , only : decompInit_lnd, decompInit_glcp
-    use decompMod       , only : get_proc_bounds
+    use decompMod       
     use domainMod       , only : domain_check, ldomain, domain_init
-    use surfrdMod       , only : surfrd_get_globmask, surfrd_get_grid, surfrd_get_topo, &
-                                 surfrd_get_data
-    use controlMod      , only : control_init, control_print, nlfilename
 
 
   ! LIS modules
@@ -67,68 +66,35 @@ module clm45_lsmMod
 
 !EOP
 
- type, public :: clm45_domain_dec 
-    
-! !PRIVATE TYPES:
-  private  ! (now mostly public for decompinitmod)
-
+!------------ beginning of domain  -------------------
+ type, public :: clm45_domain_dec
   integer,public :: nclumps     ! total number of clumps across all processors
   integer,public :: numg        ! total number of gridcells on all procs
   integer,public :: numl        ! total number of landunits on all procs
   integer,public :: numc        ! total number of columns on all procs
   integer,public :: nump        ! total number of pfts on all procs
-
-  !---global information on each pe
-  type processor_type
-     integer :: nclumps          ! number of clumps for processor_type iam
-     integer,pointer :: cid(:)   ! clump indices
-     integer :: ncells           ! number of gridcells in proc
-     integer :: nlunits          ! number of landunits in proc
-     integer :: ncols            ! number of columns in proc
-     integer :: npfts            ! number of pfts in proc
-     integer :: begg, endg       ! beginning and ending gridcell index
-     integer :: begl, endl       ! beginning and ending landunit index
-     integer :: begc, endc       ! beginning and ending column index
-     integer :: begp, endp       ! beginning and ending pft index
-  end type processor_type
-  public processor_type
   type(processor_type),public :: procinfo
-
-  !---global information on each pe
-  type clump_type
-     integer :: owner            ! process id owning clump
-     integer :: ncells           ! number of gridcells in clump
-     integer :: nlunits          ! number of landunits in clump
-     integer :: ncols            ! number of columns in clump
-     integer :: npfts            ! number of pfts in clump
-     integer :: begg, endg       ! beginning and ending gridcell index
-     integer :: begl, endl       ! beginning and ending landunit index
-     integer :: begc, endc       ! beginning and ending column index
-     integer :: begp, endp       ! beginning and ending pft index
-  end type clump_type
-  public clump_type
   type(clump_type),public, allocatable :: clumps(:)
+  type(decomp_type),public :: ldecomp
+  type(domain_type), public :: ldomain
+ end type clm45_domain_dec
 
-  type decomp_type
-     integer,pointer :: glo2gdc(:)    ! 1d glo to 1d gdc
-     integer,pointer :: gdc2glo(:)    ! 1d gdc to 1d glo
-  end type decomp_type
-  public decomp_type
-  type(decomp_type),public,target :: ldecomp
+ type(clm45_domain_dec), allocatable :: clm45_domain
 
-end type clm45_domain_dec
+!------------ end of domain stuff -------------------
 
-type(clm45_domain_dec), allocatable :: clm45_domain(:)   ! nnest copies 
-
+!============== state variables ======================
 
   type, public :: clm45_type_dec
      character*100 :: clm_rfile
      character*100 :: clm_vfile
      character*100 :: clm_chtfile
+     integer      :: clm45open 
      integer      :: count
      integer                    :: clmopen
      integer                    :: numout
      real                       :: ts
+     real                       :: rstInterval
 ! CLM4.5 native types
 ! extracted from  ~/CESM/cesm1_2_2_dev/models/lnd/clm/src/clm4_5/main/clmtype.F90 
 type(energy_balance_type)   :: pebal !energy balance structure
@@ -142,18 +108,18 @@ type(nitrogen_balance_type) :: cnbal !nitrogen balance structure
 type(pft_pstate_type) :: pps      !physical state variables
 type(pft_pstate_type) :: pps_a    !pft-level pstate variables averaged to the column
 type(pft_psynstate_type)::ppsyns     !photosynthesis relevant variables
-type(pft_epc_type), public, target, save :: pftcon
-type(decomp_cascade_type), public, target, save :: decomp_cascade_con
-type(pft_dgvepc_type), public, target, save :: dgv_pftcon
+type(pft_epc_type)  :: pftcon
+type(decomp_cascade_type) :: decomp_cascade_con
+type(pft_dgvepc_type) :: dgv_pftcon
 type(pft_epv_type)    :: pepv        !pft ecophysiological variables
 type(pft_estate_type) :: pes      !pft energy state
 type(pft_wstate_type) :: pws         !pft water state
-type(pft_cstate_type), target :: pcs         !pft carbon state
-type(pft_cstate_type), target :: pcs_a       !pft-level carbon state averaged to the column
-type(pft_cstate_type), target :: pc13s       !pft carbon-13 state
-type(pft_cstate_type), target :: pc13s_a     !pft carbon-13 state averaged to the column
-type(pft_cstate_type), target :: pc14s       !pft carbon-14 state
-type(pft_cstate_type), target :: pc14s_a     !pft carbon-14 state averaged to the column
+type(pft_cstate_type)  :: pcs         !pft carbon state
+type(pft_cstate_type) :: pcs_a       !pft-level carbon state averaged to the column
+type(pft_cstate_type) :: pc13s       !pft carbon-13 state
+type(pft_cstate_type) :: pc13s_a     !pft carbon-13 state averaged to the column
+type(pft_cstate_type) :: pc14s       !pft carbon-14 state
+type(pft_cstate_type) :: pc14s_a     !pft carbon-14 state averaged to the column
 type(pft_nstate_type) :: pns      !pft nitrogen state
 type(pft_nstate_type) :: pns_a    !pft-level nitrogen state variables averaged to the column
 type(pft_vstate_type) :: pvs         !pft VOC state
@@ -161,12 +127,12 @@ type(pft_dgvstate_type) :: pdgvs     !pft DGVM state variables
 type(pft_eflux_type)  :: pef         !pft energy flux
 type(pft_mflux_type)  :: pmf         !pft momentum flux
 type(pft_wflux_type)  :: pwf         !pft water flux
-type(pft_cflux_type), target :: pcf      !pft carbon flux
-type(pft_cflux_type), target :: pcf_a    !pft carbon flux averaged to the column
-type(pft_cflux_type), target :: pc13f    !pft carbon-13 flux
-type(pft_cflux_type), target :: pc13f_a  !pft carbon-13 flux averaged to the column
-type(pft_cflux_type), target :: pc14f    !pft carbon-14 flux
-type(pft_cflux_type), target :: pc14f_a  !pft carbon-14 flux averaged to the column
+type(pft_cflux_type)  :: pcf      !pft carbon flux
+type(pft_cflux_type) :: pcf_a    !pft carbon flux averaged to the column
+type(pft_cflux_type) :: pc13f    !pft carbon-13 flux
+type(pft_cflux_type) :: pc13f_a  !pft carbon-13 flux averaged to the column
+type(pft_cflux_type) :: pc14f    !pft carbon-14 flux
+type(pft_cflux_type) :: pc14f_a  !pft carbon-14 flux averaged to the column
 type(pft_nflux_type)  :: pnf       !pft nitrogen flux
 type(pft_nflux_type)  :: pnf_a     !pft-level nitrogen flux variables averaged to the column
 type(pft_vflux_type)  :: pvf         !pft VOC flux
@@ -176,9 +142,9 @@ type(column_pstate_type) :: cps      !column physical state variables
 type(column_estate_type) :: ces      !column energy state
 type(column_wstate_type) :: cws      !column water state
 type(pft_wstate_type)    :: pws_a    !pft-level water state variables averaged to the column
-type(column_cstate_type), target :: ccs      !column carbon state
-type(column_cstate_type), target :: cc13s    !column carbon-13 state
-type(column_cstate_type), target :: cc14s    !column carbon-14 state
+type(column_cstate_type) :: ccs      !column carbon state
+type(column_cstate_type) :: cc13s    !column carbon-13 state
+type(column_cstate_type) :: cc14s    !column carbon-14 state
 type(column_ch4_type)   :: cch4      !column CH4 variables
 type(column_nstate_type) :: cns      !column nitrogen state
 type(column_nstate_type) :: cns_a    !column-level nitrogen state variables averaged to gridcell
@@ -186,9 +152,9 @@ type(column_eflux_type) :: cef       ! column energy flux
 type(pft_eflux_type)    :: pef_a     ! pft-level energy flux variables averaged to the column
 type(column_wflux_type) :: cwf       ! column water flux
 type(pft_wflux_type)    :: pwf_a     ! pft-level water flux variables averaged to the column
-type(column_cflux_type), target :: ccf    ! column carbon flux
-type(column_cflux_type), target :: cc13f  ! column carbon-13 flux
-type(column_cflux_type), target :: cc14f  ! column carbon-14 flux
+type(column_cflux_type) :: ccf    ! column carbon flux
+type(column_cflux_type) :: cc13f  ! column carbon-13 flux
+type(column_cflux_type) :: cc14f  ! column carbon-14 flux
 type(column_nflux_type) :: cnf       !column nitrogen flux
 type(landunit_pstate_type) :: lps     !land unit physical state variables
 type(column_pstate_type)   :: cps_a   !column-level physical state variables averaged to landunit
@@ -202,10 +168,13 @@ type(gridcell_efstate_type):: gve       !gridcell VOC emission factors
 type(gridcell_dgvstate_type):: gdgvs !gridcell DGVM structure
 type(gridcell_eflux_type) :: gef     !average of energy fluxes all landunits
 type(gridcell_wflux_type) :: gwf     !average of water fluxes all landunits
-type(pft_type), target :: pft  !plant functional type (pft) data structure
-type(column_type), target :: col !column data structure (soil/snow/canopy columns)
-type(landunit_type), target :: lun  !geomorphological landunits
-type(gridcell_type), target :: grc    !gridcell data structure
+type(pft_type) :: pft  !plant functional type (pft) data structure
+type(column_type) :: col !column data structure (soil/snow/canopy columns)
+type(landunit_type) :: lun  !geomorphological landunits
+type(gridcell_type) :: grc    !gridcell data structure
+
+!forcing, 
+  type(atm2lnd_type) :: clm_a2l      ! a2l fields on clm grid
 
   end type clm45_type_dec
 
@@ -294,14 +263,62 @@ contains
 
    call clm45_readcrd()
 
-! init tile-independent variables and structures 
-    call clm_varpar_init()   ! number of patches, vertical levels, etc
-    call clm_varcon_init()   ! physical constants and thickness of vertical levels 
+
+    ! Read list of PFTs and their corresponding parameter values
+    ! Independent of model resolution, Needs to stay before surfrd_get_data
+
+    call pftconrd()   ! io to be rewritten 
 
    do n = 1, LIS_rc%nnest
 
+     ! need to make nest-dependent (but they are  tile-independent variables and structures ) 
+      call clm_varpar_init(n)   ! number of patches, vertical levels, etc
+      call clm_varcon_init(n)   ! physical constants and thickness of vertical levels 
       ! translate LIS decomposed domain into CLM45 domain
       call clm45_domain_init(n)
+      ! read other parameters need to create the full glcp suite
+      
+    if (create_glacier_mec_landunit) then
+       call surfrd_get_grid(clm45_domain(n)%ldomain, fatmlndfrc(n), fglcmask(n))
+    else
+       call surfrd_get_grid(clm45_domain(n)%ldomain, fatmlndfrc(n) )
+    endif
+    if (masterproc) then
+       call domain_check(clm45_domain(n)%ldomain)
+    endif
+
+    ! Initialize urban model input (initialize urbinp data structure)
+    call UrbanInput(mode='initialize')
+
+    ! Allocate surface grid dynamic memory (for wtxy and vegxy arrays)
+    ! Allocate additional dynamic memory for glacier_mec topo and thickness
+
+    ! YDT: need to make nest-dependent 
+    call get_proc_bounds(begg, endg)
+    allocate (vegxy(begg:endg,maxpatch), wtxy(begg:endg,maxpatch), stat=ier)
+    if (create_glacier_mec_landunit) then
+       allocate (topoxy(begg:endg,maxpatch), stat=ier)
+    else
+       allocate (topoxy(1,1), stat=ier)
+    endif
+    if (ier /= 0) then
+       write(iulog,*)'initialize allocation error'; call endrun()
+    endif
+
+    ! Read surface dataset and set up vegetation type [vegxy] and
+    ! weight [wtxy] arrays for [maxpatch] subgrid patches.
+
+    ! YDT: need to make nest-dependent, rewrite io 
+    call surfrd_get_data(ldomain, fsurdat)     
+
+    ! Determine decomposition of subgrid scale landunits, columns, pfts
+
+    ! YDT: need to make nest-dependent 
+    if (create_glacier_mec_landunit) then
+       call decompInit_glcp (ns, ni, nj, ldomain%glcmask)
+    else
+       call decompInit_glcp (ns, ni, nj)
+    endif
 
       ! allocate all the data structures for each nest
       !call init_energy_balance_type(begp, endp, clm45_struc(n)%pebal)
@@ -347,7 +364,7 @@ contains
 ! !INTERFACE:
   subroutine clm45_domain_init(n)
 ! !USES:
-    use LIS_coreMod, only : LIS_rc
+    use LIS_coreMod
     use LIS_precisionMod
 ! !DESCRIPTION:
 !
@@ -449,10 +466,12 @@ contains
 !EOP
     integer :: k, n
     do k = 1,LIS_rc%npatch(n,LIS_rc%lsm_index)
-       clm45_struc(n)%clm(k)%kpatch  = bigint
-       clm45_struc(n)%clm(k)%itypveg = bigint
-       clm45_struc(n)%clm(k)%itypwat = bigint
-       clm45_struc(n)%clm(k)%isoicol = bigint
+
+!   no more clm(k) now
+!       clm45_struc(n)%clm(k)%kpatch  = bigint
+!       clm45_struc(n)%clm(k)%itypveg = bigint
+!       clm45_struc(n)%clm(k)%itypwat = bigint
+!       clm45_struc(n)%clm(k)%isoicol = bigint
 
    end do 
 
