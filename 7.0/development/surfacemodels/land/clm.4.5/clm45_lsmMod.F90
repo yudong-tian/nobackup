@@ -30,21 +30,25 @@ module clm45_lsmMod
 ! !REVISION HISTORY:
 !    Apr 2003; Sujay Kumar, Initial Code
 ! 23 Oct 2007; Kristi Arsenault, Updated for V5.0
-! 24 Feb 2016; Yudong Tian, initial implementation of clm4.5 without nesting support. 
+! 24 Feb 2016; Yudong Tian, initial implementation of clm4.5, without nesting support. 
 !
 ! !USES:        
 
+    use netcdf
   !CLM45 native modules
     use clmtypeInitMod  , only : initClmtype
     use clmtype
     use clm_varpar      , only : maxpatch, clm_varpar_init
     use clm_varcon      , only : clm_varcon_init
-    use clm_varctl      , only : fsurdat, fatmlndfrc, flndtopo, fglcmask, noland
+    use clm_varctl      , only : fsurdat, fatmlndfrc, flndtopo, fglcmask, noland, &
+                                 create_glacier_mec_landunit
     use pftvarcon       , only : pftconrd
     use clm_atmlnd   ,   only : atm2lnd_type 
     use decompInitMod   , only : decompInit_lnd, decompInit_glcp
     use decompMod       
     use domainMod       , only : domain_check, ldomain, domain_init
+    use spmdMod         , only : masterproc
+    use UrbanInputMod
 
 
   ! LIS modules
@@ -58,6 +62,9 @@ module clm45_lsmMod
 !-----------------------------------------------------------------------------
   public :: clm45_lsm_ini
   public :: clm45_t2gcr 
+  public :: clm45_surfrd_get_grid
+  public :: read_clm45_param_to_local_g1d
+  public :: read_clm45_param_to_local_g1d_int
 !-----------------------------------------------------------------------------
 ! !PUBLIC TYPES:
 !-----------------------------------------------------------------------------
@@ -79,7 +86,7 @@ module clm45_lsmMod
   type(domain_type), public :: ldomain
  end type clm45_domain_dec
 
- type(clm45_domain_dec), allocatable :: clm45_domain
+ type(clm45_domain_dec), allocatable :: clm45_domain(:)
 
 !------------ end of domain stuff -------------------
 
@@ -196,6 +203,7 @@ contains
    use LIS_timeMgrMod,   only : LIS_clock, LIS_calendar, &
         LIS_update_timestep, LIS_registerAlarm
    use LIS_logMod,       only : LIS_verify, LIS_logunit
+   use clm_varsur
 ! !DESCRIPTION:        
 !
 !EOP
@@ -205,7 +213,12 @@ contains
    integer                 :: status
    character*3   :: fnest
 
+   integer :: begg, endg, begl, endl, begc, endc, begp, endp
+   integer :: ni, nj, ns 
+   integer :: ier 
 
+   masterproc = LIS_masterproc 
+   
    write(LIS_logunit,*) 'Inside clm45_lsm_ini() ' 
    write(LIS_logunit,*) '     pe  ntiles   grids  gdeltas goffsets tdeltas toffsets' 
    write(LIS_logunit,*) '===========================================================' 
@@ -261,34 +274,38 @@ contains
    allocate(clm45_domain(LIS_rc%nnest))
    allocate(clm45_struc(LIS_rc%nnest))
 
-   call clm45_readcrd()
+  ! call clm45_readcrd()
 
 
     ! Read list of PFTs and their corresponding parameter values
     ! Independent of model resolution, Needs to stay before surfrd_get_data
 
-    call pftconrd()   ! io to be rewritten 
+!   call pftconrd()   ! io to be rewritten 
 
    do n = 1, LIS_rc%nnest
 
      ! need to make nest-dependent (but they are  tile-independent variables and structures ) 
-      call clm_varpar_init(n)   ! number of patches, vertical levels, etc
-      call clm_varcon_init(n)   ! physical constants and thickness of vertical levels 
+      call clm_varpar_init()   ! number of patches, vertical levels, etc
+      call clm_varcon_init()   ! physical constants and thickness of vertical levels 
       ! translate LIS decomposed domain into CLM45 domain
       call clm45_domain_init(n)
+
+      ! check if can get grid and pft range now
+      call get_proc_bounds (begg, endg, begl, endl, begc, endc, begp, endp)
+      write(LIS_logunit,*) 'Local domain info: '  
+      write(LIS_logunit,*) '  begg   endg   begl  endl   begc   endc   begp   endp  '
+      write(LIS_logunit,*) '============================================================================' 
+      write(LIS_logunit,'(8I7)') begg, endg, begl, endl, begc, endc, begp, endp
+      write(LIS_logunit,*) 
+
       ! read other parameters need to create the full glcp suite
-      
-    if (create_glacier_mec_landunit) then
-       call surfrd_get_grid(clm45_domain(n)%ldomain, fatmlndfrc(n), fglcmask(n))
-    else
-       call surfrd_get_grid(clm45_domain(n)%ldomain, fatmlndfrc(n) )
-    endif
-    if (masterproc) then
-       call domain_check(clm45_domain(n)%ldomain)
-    endif
+      call clm45_surfrd_get_grid(n, ldomain) 
+     if (masterproc) then
+       call domain_check(ldomain)
+     endif
 
     ! Initialize urban model input (initialize urbinp data structure)
-    call UrbanInput(mode='initialize')
+!    call UrbanInput(mode='initialize')
 
     ! Allocate surface grid dynamic memory (for wtxy and vegxy arrays)
     ! Allocate additional dynamic memory for glacier_mec topo and thickness
@@ -296,29 +313,23 @@ contains
     ! YDT: need to make nest-dependent 
     call get_proc_bounds(begg, endg)
     allocate (vegxy(begg:endg,maxpatch), wtxy(begg:endg,maxpatch), stat=ier)
-    if (create_glacier_mec_landunit) then
-       allocate (topoxy(begg:endg,maxpatch), stat=ier)
-    else
-       allocate (topoxy(1,1), stat=ier)
-    endif
-    if (ier /= 0) then
-       write(iulog,*)'initialize allocation error'; call endrun()
-    endif
+
+!    if (create_glacier_mec_landunit) then
+!       allocate (topoxy(begg:endg,maxpatch), stat=ier)
+!    else
+     allocate (topoxy(1,1), stat=ier)
+!    endif
 
     ! Read surface dataset and set up vegetation type [vegxy] and
     ! weight [wtxy] arrays for [maxpatch] subgrid patches.
 
     ! YDT: need to make nest-dependent, rewrite io 
-    call surfrd_get_data(ldomain, fsurdat)     
+   ! call surfrd_get_data(ldomain, fsurdat)     
 
     ! Determine decomposition of subgrid scale landunits, columns, pfts
 
     ! YDT: need to make nest-dependent 
-    if (create_glacier_mec_landunit) then
-       call decompInit_glcp (ns, ni, nj, ldomain%glcmask)
-    else
-       call decompInit_glcp (ns, ni, nj)
-    endif
+!       call decompInit_glcp (ns, ni, nj)
 
       ! allocate all the data structures for each nest
       !call init_energy_balance_type(begp, endp, clm45_struc(n)%pebal)
@@ -376,6 +387,11 @@ contains
 !   index of the nest
 ! \end{description}
 !EOP
+    integer :: beg                          ! local beg index
+    integer :: end                          ! local end index
+    integer :: ni,nj,ns                     ! size of grid on file
+    logical :: isgrid2d                     ! true => file is 2d lat/lon
+
     integer :: k, n, nclumps 
     integer :: ier, ip, cid 
     integer, parameter :: clump_pproc = 1
@@ -385,60 +401,67 @@ contains
 
     nclumps = clump_pproc * LIS_npes
 
-    allocate(clm45_domain(n)%procinfo%cid(clump_pproc), stat=ier)
+    allocate(procinfo%cid(clump_pproc), stat=ier)
 
-    clm45_domain(n)%procinfo%nclumps = clump_pproc
-    clm45_domain(n)%procinfo%cid(:)  = -1
-    clm45_domain(n)%procinfo%ncells  = 0
-    clm45_domain(n)%procinfo%nlunits = 0
-    clm45_domain(n)%procinfo%ncols   = 0
-    clm45_domain(n)%procinfo%npfts   = 0
-    clm45_domain(n)%procinfo%begg    = 1
-    clm45_domain(n)%procinfo%begl    = 1
-    clm45_domain(n)%procinfo%begc    = 1
-    clm45_domain(n)%procinfo%begp    = 1
-    clm45_domain(n)%procinfo%endg    = 0
-    clm45_domain(n)%procinfo%endl    = 0
-    clm45_domain(n)%procinfo%endc    = 0
-    clm45_domain(n)%procinfo%endp    = 0
+    procinfo%nclumps = clump_pproc
+    procinfo%cid(:)  = -1
+    procinfo%ncells  = 0
+    procinfo%nlunits = 0
+    procinfo%ncols   = 0
+    procinfo%npfts   = 0
+    procinfo%begg    = 1
+    procinfo%begl    = 1
+    procinfo%begc    = 1
+    procinfo%begp    = 1
+    procinfo%endg    = 0
+    procinfo%endl    = 0
+    procinfo%endc    = 0
+    procinfo%endp    = 0
 
-    allocate(clm45_domain(n)%clumps(nclumps), stat=ier)
+    allocate(clumps(nclumps), stat=ier)
 
-    clm45_domain(n)%clumps(:)%owner   = -1
-    clm45_domain(n)%clumps(:)%ncells  = 0
-    clm45_domain(n)%clumps(:)%nlunits = 0
-    clm45_domain(n)%clumps(:)%ncols   = 0
-    clm45_domain(n)%clumps(:)%npfts   = 0
-    clm45_domain(n)%clumps(:)%begg    = 1
-    clm45_domain(n)%clumps(:)%begl    = 1
-    clm45_domain(n)%clumps(:)%begc    = 1
-    clm45_domain(n)%clumps(:)%begp    = 1
-    clm45_domain(n)%clumps(:)%endg    = 0
-    clm45_domain(n)%clumps(:)%endl    = 0
-    clm45_domain(n)%clumps(:)%endc    = 0
-    clm45_domain(n)%clumps(:)%endp    = 0
+    clumps(:)%owner   = -1
+    clumps(:)%ncells  = 0
+    clumps(:)%nlunits = 0
+    clumps(:)%ncols   = 0
+    clumps(:)%npfts   = 0
+    clumps(:)%begg    = 1
+    clumps(:)%begl    = 1
+    clumps(:)%begc    = 1
+    clumps(:)%begp    = 1
+    clumps(:)%endg    = 0
+    clumps(:)%endl    = 0
+    clumps(:)%endc    = 0
+    clumps(:)%endp    = 0
 
     Do ip = 0, LIS_npes-1 
        cid = ip+1
-       clm45_domain(n)%clumps(cid)%owner   = ip 
-       clm45_domain(n)%procinfo%cid(clump_pproc)  = cid 
+       clumps(cid)%owner   = ip 
+       procinfo%cid(clump_pproc)  = cid 
     End Do 
 
     cid = LIS_localPet + 1
     ! cpu-local 
-    if ( clm45_domain(n)%clumps(cid)%owner == LIS_localPet ) then 
-       clm45_domain(n)%procinfo%ncells  = LIS_ngrids(n, LIS_localPet)
-       clm45_domain(n)%procinfo%begg = 1    ! pe-local, every one starts from 1
-       clm45_domain(n)%procinfo%endg = LIS_ngrids(n, LIS_localPet)   
+    if ( clumps(cid)%owner == LIS_localPet ) then 
+       procinfo%ncells  = LIS_ngrids(n, LIS_localPet)
+       procinfo%begg = 1    ! pe-local, every one starts from 1
+       procinfo%endg = LIS_ngrids(n, LIS_localPet)   
+       procinfo%begp = 1    ! pe-local, every one starts from 1
+       procinfo%endp = LIS_ntiless(n, LIS_localPet)  
     end if 
 
     ! across cpu
     Do ip = 0, LIS_npes-1 
        cid = ip+1
-       clm45_domain(n)%clumps(cid)%ncells  =  LIS_ngrids(n, ip) 
-       clm45_domain(n)%clumps(cid)%begg  =  1 
-       clm45_domain(n)%clumps(cid)%endg  =  LIS_ngrids(n, ip) 
+       clumps(cid)%ncells  =  LIS_ngrids(n, ip) 
+       clumps(cid)%begg  =  1 
+       clumps(cid)%endg  =  LIS_ngrids(n, ip) 
+       clumps(cid)%begp  =  1 
+       clumps(cid)%endp  =  LIS_ntiless(n, ip) 
     End Do 
+
+    call get_proc_bounds(beg, end)
+    call domain_init(ldomain, isgrid2d=isgrid2d, ni=ni, nj=nj, nbeg=beg, nend=end)
 
  end subroutine clm45_domain_init
 
@@ -476,6 +499,199 @@ contains
    end do 
 
  end subroutine clm45_lsm_init
+
+!BOP
+!
+! !ROUTINE: clm45_surfrd_get_grid
+! \label{clm45_surfrd_get_grid} 
+!
+! !INTERFACE:
+  subroutine clm45_surfrd_get_grid(n, ldomain) 
+! !USES:
+  use clm_varcon, only : spval, re
+  use domainMod , only : domain_type
+! !ARGUMENTS:
+    implicit none
+    integer :: n
+    type(domain_type),intent(inout) :: ldomain   ! domain to init
+
+! !DESCRIPTION:
+! Subroutine to fill in domain data (lat, lon, area, etc.) to ldomain 
+!
+!EOP
+
+     call read_clm45_param_to_local_g1d(n, ldomain%area, 'area') 
+      ! convert from radians**2 to km**2
+      ldomain%area = ldomain%area * (re**2)
+     call read_clm45_param_to_local_g1d(n, ldomain%lonc, 'xc') 
+     call read_clm45_param_to_local_g1d(n, ldomain%latc, 'yc') 
+     call read_clm45_param_to_local_g1d_int(n, ldomain%mask, 'mask') 
+     call read_clm45_param_to_local_g1d(n, ldomain%frac, 'frac') 
+
+  end subroutine clm45_surfrd_get_grid
+
+
+!BOP
+!
+! !ROUTINE: read_clm45_param_to_local_g1d
+! \label{read_clm45_param_to_local_g1d}
+!
+! !INTERFACE:
+  subroutine read_clm45_param_to_local_g1d(n, var, varname) 
+! !USES:
+   use ESMF
+   use LIS_surfaceModelDataMod, only : LIS_sfmodel_struc
+   use LIS_coreMod
+   use LIS_timeMgrMod,   only : LIS_clock, LIS_calendar, &
+        LIS_update_timestep, LIS_registerAlarm
+   use LIS_logMod,       only : LIS_verify, LIS_logunit
+! !DESCRIPTION:
+! Subroutine to read a global 2D variable from LDT into local variable, 1-D grid space. 
+!
+!EOP
+   implicit none
+   integer, intent(in) :: n
+   real(r8), pointer :: var(:) 
+   character(len=*), intent(in) :: varname
+   integer :: t, g, gid, lastg, g0, i, j, ic0, ir0, gid0, lastgrid  ! how many tiles up to last grid
+
+    integer                    :: ios
+    integer                    :: ncId, nrId
+    integer                    :: ncbId, nrbId
+    integer                    :: varid, latId,lonId
+    integer                    :: latbId,lonbId
+    integer                    :: gnc,gnr
+    integer                    :: gnc_b, gnr_b
+    integer                    :: ftn
+    integer                    :: k, gindex
+    logical                    :: file_exists
+    real,      allocatable     :: globalvar(:,:)
+    real    :: localvar(LIS_rc%lnc(n),LIS_rc%lnr(n))
+
+#if (defined USE_NETCDF3 || defined USE_NETCDF4)
+
+          ios = nf90_open(path=LIS_rc%paramfile(n),&
+               mode=NF90_NOWRITE,ncid=ftn)
+          call LIS_verify(ios,'Error in nf90_open in read_clm45_params:paramfile')
+
+          ios = nf90_inq_dimid(ftn,"east_west",ncId)
+          call LIS_verify(ios,'Error in nf90_inq_dimid in read_clm45_params:east_west')
+
+          ios = nf90_inq_dimid(ftn,"north_south",nrId)
+          call LIS_verify(ios,'Error in nf90_inq_dimid in read_clm45_params:north_south')
+
+          ios = nf90_inquire_dimension(ftn,ncId, len=gnc)
+          call LIS_verify(ios,'Error in nf90_inquire_dimension in read_clm45_params:ncId')
+
+          ios = nf90_inquire_dimension(ftn,nrId, len=gnr)
+          call LIS_verify(ios,'Error in nf90_inquire_dimension in read_clm45_params:nrId')
+
+          allocate(globalvar(gnc,gnr))
+
+          ios = nf90_inq_varid(ftn, trim(varname), varid)
+          call LIS_verify(ios, trim(varname)// ' field not found in the LIS param file')
+
+          ios = nf90_get_var(ftn, varid, globalvar)
+          call LIS_verify(ios,'Error in nf90_get_var for '// trim(varname) // ' in read_clm45_params')
+
+          ios = nf90_close(ftn)
+          call LIS_verify(ios,'Error in nf90_close in read_clm45_params')
+
+          localvar(:,:) = &
+            globalvar(LIS_ews_halo_ind(n,LIS_localPet+1):&
+            LIS_ewe_halo_ind(n,LIS_localPet+1), &
+            LIS_nss_halo_ind(n,LIS_localPet+1): &
+            LIS_nse_halo_ind(n,LIS_localPet+1))
+
+          do t = 1, LIS_rc%ntiles(n)
+           g = LIS_domain(n)%tile(t)%index
+           var(g) = localvar(LIS_domain(n)%tile(t)%col, LIS_domain(n)%tile(t)%row) 
+          end do 
+          deallocate(globalvar) 
+#endif
+
+  end subroutine read_clm45_param_to_local_g1d 
+
+!BOP
+!
+! !ROUTINE: read_clm45_param_to_local_g1d_int
+! \label{read_clm45_param_to_local_g1d_int}
+!
+! !INTERFACE:
+  subroutine read_clm45_param_to_local_g1d_int(n, var, varname) 
+! !USES:
+   use ESMF
+   use LIS_surfaceModelDataMod, only : LIS_sfmodel_struc
+   use LIS_coreMod
+   use LIS_timeMgrMod,   only : LIS_clock, LIS_calendar, &
+        LIS_update_timestep, LIS_registerAlarm
+   use LIS_logMod,       only : LIS_verify, LIS_logunit
+! !DESCRIPTION:
+! Subroutine to read a global 2D variable from LDT into local variable, 1-D grid space. 
+!
+!EOP
+   implicit none
+   integer, intent(in) :: n
+   integer, pointer :: var(:) 
+   character(len=*), intent(in) :: varname
+   integer :: t, g, gid, lastg, g0, i, j, ic0, ir0, gid0, lastgrid  ! how many tiles up to last grid
+
+    integer                    :: ios
+    integer                    :: ncId, nrId
+    integer                    :: ncbId, nrbId
+    integer                    :: varid, latId,lonId
+    integer                    :: latbId,lonbId
+    integer                    :: gnc,gnr
+    integer                    :: gnc_b, gnr_b
+    integer                    :: ftn
+    integer                    :: k, gindex
+    logical                    :: file_exists
+    real,      allocatable     :: globalvar(:,:)
+    real    :: localvar(LIS_rc%lnc(n),LIS_rc%lnr(n))
+
+#if (defined USE_NETCDF3 || defined USE_NETCDF4)
+
+          ios = nf90_open(path=LIS_rc%paramfile(n),&
+               mode=NF90_NOWRITE,ncid=ftn)
+          call LIS_verify(ios,'Error in nf90_open in read_clm45_params:paramfile')
+
+          ios = nf90_inq_dimid(ftn,"east_west",ncId)
+          call LIS_verify(ios,'Error in nf90_inq_dimid in read_clm45_params:east_west')
+
+          ios = nf90_inq_dimid(ftn,"north_south",nrId)
+          call LIS_verify(ios,'Error in nf90_inq_dimid in read_clm45_params:north_south')
+
+          ios = nf90_inquire_dimension(ftn,ncId, len=gnc)
+          call LIS_verify(ios,'Error in nf90_inquire_dimension in read_clm45_params:ncId')
+
+          ios = nf90_inquire_dimension(ftn,nrId, len=gnr)
+          call LIS_verify(ios,'Error in nf90_inquire_dimension in read_clm45_params:nrId')
+
+          allocate(globalvar(gnc,gnr))
+
+          ios = nf90_inq_varid(ftn, trim(varname), varid)
+          call LIS_verify(ios, trim(varname)// ' field not found in the LIS param file')
+
+          ios = nf90_get_var(ftn, varid, globalvar)
+          call LIS_verify(ios,'Error in nf90_get_var for '// trim(varname) // ' in read_clm45_params')
+
+          ios = nf90_close(ftn)
+          call LIS_verify(ios,'Error in nf90_close in read_clm45_params')
+
+          localvar(:,:) = &
+            globalvar(LIS_ews_halo_ind(n,LIS_localPet+1):&
+            LIS_ewe_halo_ind(n,LIS_localPet+1), &
+            LIS_nss_halo_ind(n,LIS_localPet+1): &
+            LIS_nse_halo_ind(n,LIS_localPet+1))
+
+          do t = 1, LIS_rc%ntiles(n)
+           g = LIS_domain(n)%tile(t)%index
+           var(g) = nint(localvar(LIS_domain(n)%tile(t)%col, LIS_domain(n)%tile(t)%row)) 
+          end do 
+          deallocate(globalvar) 
+#endif
+
+  end subroutine read_clm45_param_to_local_g1d_int 
 
 !BOP
 !
@@ -522,5 +738,7 @@ contains
 
   end subroutine clm45_t2gcr
 
+
 end module clm45_lsmMod
+
 
