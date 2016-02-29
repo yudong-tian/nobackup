@@ -259,16 +259,19 @@ contains
          g = LIS_domain(n)%tile(t)%index
            call clm45_t2gcr(n, LIS_localPet, t, gic, gir, git)  ! get global ic, ir from local tile id
            gid = gic+(gir-1)*LIS_rc%gnc(n)
-           write(LIS_logunit,'(6I6, 2F8.2, 3I5, 2I7)') t, LIS_domain(n)%tile(t)%col, LIS_domain(n)%tile(t)%row, &
-                                   LIS_domain(n)%tile(t)%index, LIS_domain(n)%tile(t)%tile_id, &
-                                   LIS_domain(n)%tile(t)%vegt, &
-                                   LIS_domain(n)%grid(g)%lon, LIS_domain(n)%grid(g)%lat, & 
-                                   gic, gir,  LIS_domain(n)%ntiles_pergrid(gid), LIS_domain(n)%str_tind(gid), git
+!           write(LIS_logunit,'(6I6, 2F8.2, 3I5, 2I7)') t, LIS_domain(n)%tile(t)%col, LIS_domain(n)%tile(t)%row, &
+!                                   LIS_domain(n)%tile(t)%index, LIS_domain(n)%tile(t)%tile_id, &
+!                                   LIS_domain(n)%tile(t)%vegt, &
+!                                   LIS_domain(n)%grid(g)%lon, LIS_domain(n)%grid(g)%lat, & 
+!                                   gic, gir,  LIS_domain(n)%ntiles_pergrid(gid), LIS_domain(n)%str_tind(gid), git
      end do 
    end do 
    write(LIS_logunit, *) ! empty line
                                  
-
+   do n = 1, LIS_rc%nnest
+     ni = LIS_ewe_halo_ind(n,LIS_localPet+1) - LIS_ews_halo_ind(n,LIS_localPet+1) + 1 
+     nj = LIS_nse_halo_ind(n,LIS_localPet+1) - LIS_nss_halo_ind(n,LIS_localPet+1) + 1 
+   end do 
 
    allocate(clm45_domain(LIS_rc%nnest))
    allocate(clm45_struc(LIS_rc%nnest))
@@ -287,7 +290,8 @@ contains
       call clm_varpar_init()   ! number of patches, vertical levels, etc
       call clm_varcon_init()   ! physical constants and thickness of vertical levels 
       ! translate LIS decomposed domain into CLM45 domain
-!      call clm45_domain_init(n)
+      write(LIS_logunit,*) 'clm_varpar_init and clm_varcon_init done. '  
+      call clm45_domain_init(n, ni, nj)
 
       ! check if can get grid and pft range now
       call get_proc_bounds (begg, endg, begl, endl, begc, endc, begp, endp)
@@ -298,7 +302,7 @@ contains
       write(LIS_logunit,*) 
 
       ! read other parameters need to create the full glcp suite
-!      call clm45_surfrd_get_grid(n, ldomain) 
+     call clm45_surfrd_get_grid(n, ldomain) 
      if (masterproc) then
        call domain_check(ldomain)
      endif
@@ -323,7 +327,7 @@ contains
     ! weight [wtxy] arrays for [maxpatch] subgrid patches.
 
     ! YDT: need to make nest-dependent, rewrite io 
-   ! call surfrd_get_data(ldomain, fsurdat)     
+     call clm45_surfrd_get_data(n, ldomain) 
 
     ! Determine decomposition of subgrid scale landunits, columns, pfts
 
@@ -340,17 +344,17 @@ contains
 !------------------------------------------------------------------------
 ! Model timestep Alarm
 !------------------------------------------------------------------------
-!       call LIS_update_timestep(LIS_rc, n, clm45_struc(n)%ts)
-!
-!       write(fnest,'(i3.3)') n
-!
-!       call LIS_registerAlarm("CLM45 model alarm "//trim(fnest),&
-!            clm45_struc(n)%ts,&
-!            clm45_struc(n)%ts)
-!
-!       call LIS_registerAlarm("CLM45 restart alarm "//trim(fnest),&
-!            clm45_struc(n)%ts,&
-!            clm45_struc(n)%rstInterval)
+       call LIS_update_timestep(LIS_rc, n, clm45_struc(n)%ts)
+
+       write(fnest,'(i3.3)') n
+
+       call LIS_registerAlarm("CLM45 model alarm "//trim(fnest),&
+            clm45_struc(n)%ts,&
+            clm45_struc(n)%ts)
+
+       call LIS_registerAlarm("CLM45 restart alarm "//trim(fnest),&
+            clm45_struc(n)%ts,&
+            clm45_struc(n)%rstInterval)
 
       clm45_struc(n)%numout = 0
       clm45_struc(n)%count = 0
@@ -372,7 +376,7 @@ contains
 ! \label{clm45_domain_init}
 !
 ! !INTERFACE:
-  subroutine clm45_domain_init(n)
+  subroutine clm45_domain_init(n, ni, nj)
 ! !USES:
     use LIS_coreMod
     use LIS_precisionMod
@@ -398,6 +402,8 @@ contains
     ! with clump_pproc = 1, nclumps = LIS_npes; cid ranges from 1 ... LIS_npes, 
     ! with corresponding owner ranging from 0 ... LIS_npes-1 (pid)
 
+    isgrid2d = .true. 
+    ns = ni*nj
     nclumps = clump_pproc * LIS_npes
 
     allocate(procinfo%cid(clump_pproc), stat=ier)
@@ -524,10 +530,40 @@ contains
       ldomain%area = ldomain%area * (re**2)
      call read_clm45_param_to_local_g1d(n, ldomain%lonc, 'xc') 
      call read_clm45_param_to_local_g1d(n, ldomain%latc, 'yc') 
-     call read_clm45_param_to_local_g1d_int(n, ldomain%mask, 'mask') 
+     call read_clm45_param_to_local_g1d_int(n, ldomain%mask, 'LANDMASK') 
      call read_clm45_param_to_local_g1d(n, ldomain%frac, 'frac') 
 
   end subroutine clm45_surfrd_get_grid
+
+!BOP
+!
+! !ROUTINE: clm45_surfrd_get_data
+! \label{clm45_surfrd_get_data}
+!
+! !INTERFACE:
+  subroutine clm45_surfrd_get_data(n, ldomain)
+! !USES:
+  use clm_varcon, only : spval, re
+  use domainMod , only : domain_type
+! !ARGUMENTS:
+    implicit none
+    integer :: n
+    type(domain_type),intent(inout) :: ldomain   ! domain to init
+
+! !DESCRIPTION:
+! Subroutine to fill in domain data (lat, lon, area, etc.) to ldomain
+!
+!EOP
+
+     call read_clm45_param_to_local_g1d(n, ldomain%area, 'area')
+      ! convert from radians**2 to km**2
+      ldomain%area = ldomain%area * (re**2)
+     call read_clm45_param_to_local_g1d(n, ldomain%lonc, 'xc')
+     call read_clm45_param_to_local_g1d(n, ldomain%latc, 'yc')
+     call read_clm45_param_to_local_g1d_int(n, ldomain%mask, 'LANDMASK')
+     call read_clm45_param_to_local_g1d(n, ldomain%frac, 'frac')
+
+  end subroutine clm45_surfrd_get_data
 
 
 !BOP
