@@ -197,7 +197,6 @@ contains
 ! !INTERFACE:
   subroutine clm45_lsm_ini()
 ! !USES:
-   use ESMF
    use LIS_surfaceModelDataMod, only : LIS_sfmodel_struc
    use LIS_coreMod
    use LIS_timeMgrMod,   only : LIS_clock, LIS_calendar, &
@@ -288,7 +287,7 @@ contains
       call clm_varpar_init()   ! number of patches, vertical levels, etc
       call clm_varcon_init()   ! physical constants and thickness of vertical levels 
       ! translate LIS decomposed domain into CLM45 domain
-      call clm45_domain_init(n)
+!      call clm45_domain_init(n)
 
       ! check if can get grid and pft range now
       call get_proc_bounds (begg, endg, begl, endl, begc, endc, begp, endp)
@@ -299,7 +298,7 @@ contains
       write(LIS_logunit,*) 
 
       ! read other parameters need to create the full glcp suite
-      call clm45_surfrd_get_grid(n, ldomain) 
+!      call clm45_surfrd_get_grid(n, ldomain) 
      if (masterproc) then
        call domain_check(ldomain)
      endif
@@ -341,17 +340,17 @@ contains
 !------------------------------------------------------------------------
 ! Model timestep Alarm
 !------------------------------------------------------------------------
-       call LIS_update_timestep(LIS_rc, n, clm45_struc(n)%ts)
-
-       write(fnest,'(i3.3)') n
-
-       call LIS_registerAlarm("CLM45 model alarm "//trim(fnest),&
-            clm45_struc(n)%ts,&
-            clm45_struc(n)%ts)
-
-       call LIS_registerAlarm("CLM45 restart alarm "//trim(fnest),&
-            clm45_struc(n)%ts,&
-            clm45_struc(n)%rstInterval)
+!       call LIS_update_timestep(LIS_rc, n, clm45_struc(n)%ts)
+!
+!       write(fnest,'(i3.3)') n
+!
+!       call LIS_registerAlarm("CLM45 model alarm "//trim(fnest),&
+!            clm45_struc(n)%ts,&
+!            clm45_struc(n)%ts)
+!
+!       call LIS_registerAlarm("CLM45 restart alarm "//trim(fnest),&
+!            clm45_struc(n)%ts,&
+!            clm45_struc(n)%rstInterval)
 
       clm45_struc(n)%numout = 0
       clm45_struc(n)%count = 0
@@ -539,7 +538,6 @@ contains
 ! !INTERFACE:
   subroutine read_clm45_param_to_local_g1d(n, var, varname) 
 ! !USES:
-   use ESMF
    use LIS_surfaceModelDataMod, only : LIS_sfmodel_struc
    use LIS_coreMod
    use LIS_timeMgrMod,   only : LIS_clock, LIS_calendar, &
@@ -620,7 +618,6 @@ contains
 ! !INTERFACE:
   subroutine read_clm45_param_to_local_g1d_int(n, var, varname) 
 ! !USES:
-   use ESMF
    use LIS_surfaceModelDataMod, only : LIS_sfmodel_struc
    use LIS_coreMod
    use LIS_timeMgrMod,   only : LIS_clock, LIS_calendar, &
@@ -701,7 +698,6 @@ contains
 ! !INTERFACE:
   subroutine clm45_t2gcr(n, ipe, it, ic, ir, git)
 ! !USES:
-   use ESMF
    use LIS_surfaceModelDataMod, only : LIS_sfmodel_struc
    use LIS_coreMod
    use LIS_timeMgrMod,   only : LIS_clock, LIS_calendar, &
