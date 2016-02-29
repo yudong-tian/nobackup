@@ -50,9 +50,9 @@ module clm45_lsmMod
     use spmdMod         , only : masterproc
     use UrbanInputMod
 
-
   ! LIS modules
   use clm45_module
+  use LIS_logMod
 
   implicit none
   
@@ -545,9 +545,10 @@ contains
 ! !USES:
   use clm_varcon, only : spval, re
   use domainMod , only : domain_type
+  use clm_varsur  , only : wtxy, vegxy, topoxy, pctspec
 ! !ARGUMENTS:
     implicit none
-    integer :: n
+    integer :: n, begg, endg
     type(domain_type),intent(inout) :: ldomain   ! domain to init
 
 ! !DESCRIPTION:
@@ -555,15 +556,336 @@ contains
 !
 !EOP
 
-     call read_clm45_param_to_local_g1d(n, ldomain%area, 'area')
-      ! convert from radians**2 to km**2
-      ldomain%area = ldomain%area * (re**2)
-     call read_clm45_param_to_local_g1d(n, ldomain%lonc, 'xc')
-     call read_clm45_param_to_local_g1d(n, ldomain%latc, 'yc')
-     call read_clm45_param_to_local_g1d_int(n, ldomain%mask, 'LANDMASK')
-     call read_clm45_param_to_local_g1d(n, ldomain%frac, 'frac')
+    call get_proc_bounds(begg,endg)
+    allocate(pctspec(begg:endg))
+
+    vegxy(:,:) = noveg
+    wtxy(:,:)  = 0._r8
+    pctspec(:) = 0._r8
+    if (allocated(topoxy)) topoxy(:,:) = 0._r8
+
+     call read_clm45_param_to_local_g1d_int(n, ldomain%pftm, 'PFTDATA_MASK')
+
+     call clm45_surfrd_wtxy_special(n) 
+     
+!YDT    if (use_cndv) then
+!YDT       if (create_crop_landunit) then ! CNDV means allocate_all_vegpfts = .true.
+!YDT          call surfrd_wtxy_veg_all(ncid, ldomain%ns, ldomain%pftm)
+!YDT       end if
+!YDT       call surfrd_wtxy_veg_dgvm()
+!YDT    else
+       if (allocate_all_vegpfts) then
+          call clm45_surfrd_wtxy_veg_all(n, ldomain%pftm)
+       else
+          call endrun ('only allocate_all_vegpfts is supported')
+       end if
+!YDT    end if
+
+    if ( masterproc )then
+       write(LIS_logunit,*) 'Successfully read surface boundary data'
+       write(LIS_logunit,*)
+    end if
 
   end subroutine clm45_surfrd_get_data
+
+!-----------------------------------------------------------------------
+!BOP
+!
+! !IROUTINE: clm45_surfrd_wtxy_veg_all
+!
+! !INTERFACE:
+  subroutine clm45_surfrd_wtxy_veg_all(n, pftm)
+!
+! !DESCRIPTION:
+! Determine wtxy and veg arrays for non-dynamic landuse mode
+!
+! !USES:
+    use clm_varctl  , only : create_crop_landunit
+    use pftvarcon   , only : nirrig, npcropmin
+    use spmdMod     , only : mpicom, MPI_LOGICAL, MPI_LOR
+!
+! !ARGUMENTS:
+    implicit none
+    integer          ,intent(in)    :: n     ! nest 
+    integer          ,pointer       :: pftm(:)
+!
+! !CALLED FROM:
+! subroutine surfrd in this module
+!
+! !REVISION HISTORY:
+! Created by Mariana Vertenstein, Sam Levis and Gordon Bonan
+! Rewritten by Yudong Tian, Feb. 29, 2016. 
+!
+!
+! !LOCAL VARIABLES:
+!EOP
+    integer  :: m,mp7,mp8,mp11,nl            ! indices
+    integer  :: begg,endg                      ! beg/end gcell index
+    integer  :: dimid,varid                    ! netCDF id's
+    integer  :: ier                            ! error status
+    logical  :: readvar                        ! is variable on dataset
+    real(r8) :: sumpct                         ! sum of %pft over maxpatch_pft
+    real(r8),allocatable :: pctpft(:,:)        ! percent of vegetated gridcell area for PFTs
+    real(r8),pointer :: arrayl(:,:)            ! local array
+    real(r8) :: numpftp1data(0:numpft)
+    logical  :: crop = .false.                 ! if crop data on this section of file
+    character(len=32) :: subname = 'clm45_surfrd_wtxy_veg_all'  ! subroutine name
+!-----------------------------------------------------------------------
+    call get_proc_bounds(begg,endg)
+    allocate(pctpft(begg:endg,0:numpft))
+
+    !YDT call check_dim(ncid, 'lsmpft', numpft+1)
+
+    allocate(arrayl(begg:endg,0:numpft))
+    call read_clm45_param_to_local_g2d(n, array1, 'PCT_PFT', 'lsmpft') 
+    pctpft(begg:endg,0:numpft) = arrayl(begg:endg,0:numpft)
+    deallocate(arrayl)
+
+    do nl = begg,endg
+       if (pftm(nl) >= 0) then
+
+          ! Error check: make sure PFTs sum to 100% cover for vegetated landunit
+          ! (convert pctpft from percent with respect to gridcel to percent with
+          ! respect to vegetated landunit)
+
+          if (pctspec(nl) < 100._r8) then
+             sumpct = 0._r8
+             do m = 0,numpft
+                sumpct = sumpct + pctpft(nl,m) * 100._r8/(100._r8-pctspec(nl))
+                if (m == nirrig .and. .not. create_crop_landunit) then
+                   if (pctpft(nl,m) > 0._r8) then
+                      call endrun( trim(subname)//' ERROR surfrdMod: irrigated crop'// &
+                                   ' PFT requires create_crop_landunit=.true.' )
+                   end if
+                end if
+             end do
+             if (abs(sumpct - 100._r8) > 0.1e-4_r8) then
+                write(iulog,*) trim(subname)//' ERROR: sum(pct) over numpft+1 is not = 100.'
+                write(iulog,*) sumpct, sumpct-100._r8, nl
+                call endrun()
+             end if
+             if (sumpct < -0.000001_r8) then
+                write(iulog,*) trim(subname)//' ERROR: sum(pct) over numpft+1 is < 0.'
+                write(iulog,*) sumpct, nl
+                call endrun()
+             end if
+             do m = npcropmin, numpft
+                if ( pctpft(nl,m) > 0.0_r8 ) crop = .true.
+             end do
+          end if
+
+          ! Set weight of each pft wrt gridcell (note that maxpatch_pft = numpft+1 here)
+
+          do m = 1,numpft+1
+             vegxy(nl,m)  = m - 1 ! 0 (bare ground) to numpft
+             wtxy(nl,m) = pctpft(nl,m-1) / 100._r8
+          end do
+
+       end if
+    end do
+
+
+!YDT needed?
+#if 0 
+    call mpi_allreduce(crop,crop_prog,1,MPI_LOGICAL,MPI_LOR,mpicom,ier)
+    if (ier /= 0) then
+       write(iulog,*) trim(subname)//' mpi_allreduce error = ',ier
+       call endrun( trim(subname)//' ERROR: error in reduce of crop_prog' )
+    endif
+    if (crop_prog .and. .not. create_crop_landunit) then
+       call endrun( trim(subname)//' ERROR: prognostic crop '// &
+                    'PFTs requires create_crop_landunit=.true.' )
+    end if
+
+#endif
+
+    deallocate(pctpft)
+
+  end subroutine clm45_surfrd_wtxy_veg_all
+
+
+
+!BOP
+!
+! !ROUTINE: clm45_surfrd_wtxy_special
+! \label{clm45_surfrd_wtxy_special}
+!
+! !INTERFACE:
+  subroutine clm45_surfrd_wtxy_special(n) 
+! !USES:
+  use clm_varcon, only : spval, re
+  use domainMod , only : domain_type
+! !ARGUMENTS:
+    implicit none
+    integer :: n
+
+   integer  :: begg,endg                  ! gcell beg/end
+    integer  :: dimid,varid                ! netCDF id's
+    real(r8) :: nlevsoidata(nlevsoi)
+    logical  :: found                      ! temporary for error check
+    integer  :: nindx                      ! temporary for error check
+    integer  :: ier                        ! error status
+    integer  :: nlev                       ! level
+    integer  :: npatch
+    logical  :: readvar
+    real(r8),pointer :: pctgla(:)      ! percent of grid cell is glacier
+    real(r8),pointer :: pctlak(:)      ! percent of grid cell is lake
+    real(r8),pointer :: pctwet(:)      ! percent of grid cell is wetland
+    real(r8),pointer :: pcturb(:)      ! percent of grid cell is urbanized
+    real(r8),pointer :: pctglc_mec(:,:)   ! percent of grid cell is glacier_mec (in each elev class)
+    real(r8),pointer :: pctglc_mec_tot(:) ! percent of grid cell is glacier (sum over classes)
+    real(r8),pointer :: topoglc_mec(:,:)  ! surface elevation in each elev class
+    character(len=32) :: subname = 'clm45_surfrd_wtxy_special'  ! subroutine name
+
+! !DESCRIPTION:
+! Re-written from surfrd_wtxy_special 
+!
+!EOP
+
+   call get_proc_bounds(begg,endg)
+
+    allocate(pctgla(begg:endg),pctlak(begg:endg))
+    allocate(pctwet(begg:endg),pcturb(begg:endg))
+
+     call read_clm45_param_to_local_g1d(n, pctwet, 'PCT_WETLAND')
+     call read_clm45_param_to_local_g1d(n, pctlak, 'PCT_LAKE')
+     call read_clm45_param_to_local_g1d(n, pctgla, 'PCT_GLACIER')
+     call read_clm45_param_to_local_g1d(n, pcturb, 'PCT_URBAN')
+
+    pctspec = pctwet + pctlak + pcturb + pctgla
+
+    ! Error check: glacier, lake, wetland, urban sum must be less than 100
+
+    found = .false.
+    do nl = begg,endg
+       if (pctspec(nl) > 100._r8+1.e-04_r8) then
+          found = .true.
+          nindx = nl
+          exit
+       end if
+       if (found) exit
+    end do
+    if ( found ) then
+       write(LIS_logunit,*)'surfrd error: PFT cover>100 for nl=',nindx
+       call endrun()
+    end if
+
+    ! Determine veg and wtxy for special landunits
+
+    do nl = begg,endg
+
+       vegxy(nl,npatch_lake)   = noveg
+       wtxy(nl,npatch_lake)    = pctlak(nl)/100._r8
+
+       vegxy(nl,npatch_wet)    = noveg
+       wtxy(nl,npatch_wet)     = pctwet(nl)/100._r8
+
+       vegxy(nl,npatch_glacier)= noveg
+       wtxy(nl,npatch_glacier) = pctgla(nl)/100._r8
+
+       ! Initialize urban weights
+
+       do nurb = npatch_urban, npatch_lake-1
+          vegxy(nl,nurb) = noveg
+          wtxy(nl,nurb)  = pcturb(nl) / 100._r8
+       end do
+       if ( pcturb(nl) > 0.0_r8 )then
+          wtxy(nl,npatch_urban)   = wtxy(nl,npatch_urban)*urbinp%wtlunit_roof(nl)
+          wtxy(nl,npatch_urban+1) = wtxy(nl,npatch_urban+1)*(1 - urbinp%wtlunit_roof(nl))/3
+          wtxy(nl,npatch_urban+2) = wtxy(nl,npatch_urban+2)*(1 - urbinp%wtlunit_roof(nl))/3
+          wtxy(nl,npatch_urban+3) = wtxy(nl,npatch_urban+3)*(1 - urbinp%wtlunit_roof(nl))/3 * (1.-urbinp%wtroad_perv(nl))
+          wtxy(nl,npatch_urban+4) = wtxy(nl,npatch_urban+4)*(1 - urbinp%wtlunit_roof(nl))/3 * urbinp%wtroad_perv(nl)
+       end if
+
+    end do
+
+    ! Check to make sure we have valid urban data for each urban patch
+
+    found = .false.
+    do nl = begg,endg
+       if ( pcturb(nl) > 0.0_r8 )then
+         if (urbinp%canyon_hwr(nl)            .le. 0._r8 .or. &
+             urbinp%em_improad(nl)            .le. 0._r8 .or. &
+             urbinp%em_perroad(nl)            .le. 0._r8 .or. &
+             urbinp%em_roof(nl)               .le. 0._r8 .or. &
+             urbinp%em_wall(nl)               .le. 0._r8 .or. &
+             urbinp%ht_roof(nl)               .le. 0._r8 .or. &
+             urbinp%thick_roof(nl)            .le. 0._r8 .or. &
+             urbinp%thick_wall(nl)            .le. 0._r8 .or. &
+             urbinp%t_building_max(nl)        .le. 0._r8 .or. &
+             urbinp%t_building_min(nl)        .le. 0._r8 .or. &
+             urbinp%wind_hgt_canyon(nl)       .le. 0._r8 .or. &
+             urbinp%wtlunit_roof(nl)          .le. 0._r8 .or. &
+             urbinp%wtroad_perv(nl)           .le. 0._r8 .or. &
+             any(urbinp%alb_improad_dir(nl,:) .le. 0._r8) .or. &
+             any(urbinp%alb_improad_dif(nl,:) .le. 0._r8) .or. &
+             any(urbinp%alb_perroad_dir(nl,:) .le. 0._r8) .or. &
+             any(urbinp%alb_perroad_dif(nl,:) .le. 0._r8) .or. &
+             any(urbinp%alb_roof_dir(nl,:)    .le. 0._r8) .or. &
+             any(urbinp%alb_roof_dif(nl,:)    .le. 0._r8) .or. &
+             any(urbinp%alb_wall_dir(nl,:)    .le. 0._r8) .or. &
+             any(urbinp%alb_wall_dif(nl,:)    .le. 0._r8) .or. &
+             any(urbinp%tk_roof(nl,:)         .le. 0._r8) .or. &
+             any(urbinp%tk_wall(nl,:)         .le. 0._r8) .or. &
+             any(urbinp%cv_roof(nl,:)         .le. 0._r8) .or. &
+             any(urbinp%cv_wall(nl,:)         .le. 0._r8)) then
+            found = .true.
+            nindx = nl
+            exit
+         else
+            if (urbinp%nlev_improad(nl) .gt. 0) then
+               nlev = urbinp%nlev_improad(nl)
+               if (any(urbinp%tk_improad(nl,1:nlev) .le. 0._r8) .or. &
+                   any(urbinp%cv_improad(nl,1:nlev) .le. 0._r8)) then
+                  found = .true.
+                  nindx = nl
+                  exit
+               end if
+            end if
+         end if
+         if (found) exit
+       end if
+    end do
+
+    if ( found ) then
+       write(LIS_logunit,*)'surfrd error: no valid urban data for nl=',nindx
+       write(LIS_logunit,*)'canyon_hwr:      ',urbinp%canyon_hwr(nindx)
+       write(LIS_logunit,*)'em_improad:      ',urbinp%em_improad(nindx)
+       write(LIS_logunit,*)'em_perroad:      ',urbinp%em_perroad(nindx)
+       write(LIS_logunit,*)'em_roof:         ',urbinp%em_roof(nindx)
+       write(LIS_logunit,*)'em_wall:         ',urbinp%em_wall(nindx)
+       write(LIS_logunit,*)'ht_roof:         ',urbinp%ht_roof(nindx)
+       write(LIS_logunit,*)'thick_roof:      ',urbinp%thick_roof(nindx)
+       write(LIS_logunit,*)'thick_wall:      ',urbinp%thick_wall(nindx)
+       write(LIS_logunit,*)'t_building_max:  ',urbinp%t_building_max(nindx)
+       write(LIS_logunit,*)'t_building_min:  ',urbinp%t_building_min(nindx)
+       write(LIS_logunit,*)'wind_hgt_canyon: ',urbinp%wind_hgt_canyon(nindx)
+       write(LIS_logunit,*)'wtlunit_roof:    ',urbinp%wtlunit_roof(nindx)
+       write(LIS_logunit,*)'wtroad_perv:     ',urbinp%wtroad_perv(nindx)
+       write(LIS_logunit,*)'alb_improad_dir: ',urbinp%alb_improad_dir(nindx,:)
+       write(LIS_logunit,*)'alb_improad_dif: ',urbinp%alb_improad_dif(nindx,:)
+       write(LIS_logunit,*)'alb_perroad_dir: ',urbinp%alb_perroad_dir(nindx,:)
+       write(LIS_logunit,*)'alb_perroad_dif: ',urbinp%alb_perroad_dif(nindx,:)
+       write(LIS_logunit,*)'alb_roof_dir:    ',urbinp%alb_roof_dir(nindx,:)
+       write(LIS_logunit,*)'alb_roof_dif:    ',urbinp%alb_roof_dif(nindx,:)
+       write(LIS_logunit,*)'alb_wall_dir:    ',urbinp%alb_wall_dir(nindx,:)
+       write(LIS_logunit,*)'alb_wall_dif:    ',urbinp%alb_wall_dif(nindx,:)
+       write(LIS_logunit,*)'tk_roof:         ',urbinp%tk_roof(nindx,:)
+       write(LIS_logunit,*)'tk_wall:         ',urbinp%tk_wall(nindx,:)
+       write(LIS_logunit,*)'cv_roof:         ',urbinp%cv_roof(nindx,:)
+       write(LIS_logunit,*)'cv_wall:         ',urbinp%cv_wall(nindx,:)
+       if (urbinp%nlev_improad(nindx) .gt. 0) then
+          nlev = urbinp%nlev_improad(nindx)
+          write(LIS_logunit,*)'tk_improad: ',urbinp%tk_improad(nindx,1:nlev)
+          write(LIS_logunit,*)'cv_improad: ',urbinp%cv_improad(nindx,1:nlev)
+       end if
+       call endrun()
+    end if
+
+   deallocate(pctgla,pctlak,pctwet,pcturb)
+
+  end subroutine clm45_surfrd_wtxy_special
+
 
 
 !BOP
@@ -645,6 +967,94 @@ contains
 #endif
 
   end subroutine read_clm45_param_to_local_g1d 
+
+!BOP
+!
+! !ROUTINE: read_clm45_param_to_local_g2d
+! \label{read_clm45_param_to_local_g2d}
+!
+! !INTERFACE:
+  subroutine read_clm45_param_to_local_g2d(n, var, varname, zdimname) 
+! !USES:
+   use LIS_surfaceModelDataMod, only : LIS_sfmodel_struc
+   use LIS_coreMod
+   use LIS_timeMgrMod,   only : LIS_clock, LIS_calendar, &
+        LIS_update_timestep, LIS_registerAlarm
+   use LIS_logMod,       only : LIS_verify, LIS_logunit
+! !DESCRIPTION:
+! Subroutine to read a global 2D variable from LDT into local variable, 1-D grid space. 
+!
+!EOP
+   implicit none
+   integer, intent(in) :: n
+   real(r8), pointer :: var(:, :) 
+   character(len=*), intent(in) :: varname, zdimname
+   integer :: t, g, gid, lastg, g0, i, j, ic0, ir0, gid0, lastgrid  ! how many tiles up to last grid
+
+    integer                    :: ios
+    integer                    :: ncId, nrId, nzId
+    integer                    :: ncbId, nrbId
+    integer                    :: varid, latId,lonId
+    integer                    :: latbId,lonbId
+    integer                    :: gnc,gnr, gnz
+    integer                    :: gnc_b, gnr_b
+    integer                    :: ftn
+    integer                    :: k, gindex
+    logical                    :: file_exists
+    real,      allocatable     :: globalvar(:, :,:)
+    real,      allocatable     :: localvar(:, :, :) 
+
+#if (defined USE_NETCDF3 || defined USE_NETCDF4)
+
+          ios = nf90_open(path=LIS_rc%paramfile(n),&
+               mode=NF90_NOWRITE,ncid=ftn)
+          call LIS_verify(ios,'Error in nf90_open in read_clm45_params:paramfile')
+
+          ios = nf90_inq_dimid(ftn,"east_west",ncId)
+          call LIS_verify(ios,'Error in nf90_inq_dimid in read_clm45_params:east_west')
+
+          ios = nf90_inq_dimid(ftn,"north_south",nrId)
+          call LIS_verify(ios,'Error in nf90_inq_dimid in read_clm45_params:north_south')
+
+          ios = nf90_inq_dimid(ftn, trim(zdimname),nrId)
+          call LIS_verify(ios,'Error in nf90_inq_dimid in read_clm45_params:'//trim(zdimname)) 
+
+          ios = nf90_inquire_dimension(ftn,ncId, len=gnc)
+          call LIS_verify(ios,'Error in nf90_inquire_dimension in read_clm45_params:ncId')
+
+          ios = nf90_inquire_dimension(ftn,nrId, len=gnr)
+          call LIS_verify(ios,'Error in nf90_inquire_dimension in read_clm45_params:nrId')
+
+          ios = nf90_inquire_dimension(ftn,nzId, len=gnz)
+          call LIS_verify(ios,'Error in nf90_inquire_dimension in read_clm45_params:nzId')
+
+          allocate(globalvar(gnc, gnr, 0:gnz))
+          allocate(localvar(LIS_rc%lnc(n),LIS_rc%lnr(n), 0:gnz))
+
+          ios = nf90_inq_varid(ftn, trim(varname), varid)
+          call LIS_verify(ios, trim(varname)// ' field not found in the LIS param file')
+
+          ios = nf90_get_var(ftn, varid, globalvar)
+          call LIS_verify(ios,'Error in nf90_get_var for '// trim(varname) // ' in read_clm45_params')
+
+          ios = nf90_close(ftn)
+          call LIS_verify(ios,'Error in nf90_close in read_clm45_params')
+
+          localvar(:,:) = &
+            globalvar(LIS_ews_halo_ind(n,LIS_localPet+1):&
+            LIS_ewe_halo_ind(n,LIS_localPet+1), &
+            LIS_nss_halo_ind(n,LIS_localPet+1): &
+            LIS_nse_halo_ind(n,LIS_localPet+1), :)
+
+          do t = 1, LIS_rc%ntiles(n)
+           g = LIS_domain(n)%tile(t)%index
+           var(g, :) = localvar(LIS_domain(n)%tile(t)%col, LIS_domain(n)%tile(t)%row, :) 
+          end do 
+          deallocate(globalvar) 
+          deallocate(localvar) 
+#endif
+
+  end subroutine read_clm45_param_to_local_g2d 
 
 !BOP
 !
