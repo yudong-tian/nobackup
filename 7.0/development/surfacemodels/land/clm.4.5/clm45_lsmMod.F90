@@ -42,7 +42,7 @@ module clm45_lsmMod
     use clm_varcon      , only : clm_varcon_init
     use clm_varctl      , only : fsurdat, fatmlndfrc, flndtopo, fglcmask, noland, &
                                  create_glacier_mec_landunit
-    use pftvarcon       , only : pftconrd
+    use clm45_pftvarcon       , only : clm45_pftconrd
     use clm_atmlnd   ,   only : atm2lnd_type 
     use decompInitMod   , only : decompInit_lnd, decompInit_glcp
     use decompMod       
@@ -276,16 +276,15 @@ contains
    allocate(clm45_domain(LIS_rc%nnest))
    allocate(clm45_struc(LIS_rc%nnest))
 
-  ! call clm45_readcrd()
-
+   call clm45_readcrd()
 
     ! Read list of PFTs and their corresponding parameter values
     ! Independent of model resolution, Needs to stay before surfrd_get_data
 
-!   call pftconrd()   ! io to be rewritten 
 
    do n = 1, LIS_rc%nnest
 
+     call clm45_pftconrd(clm45_struc(n)%clm_vfile)  !  io rewritten 
      ! need to make nest-dependent (but they are  tile-independent variables and structures ) 
       call clm_varpar_init()   ! number of patches, vertical levels, etc
       call clm_varcon_init()   ! physical constants and thickness of vertical levels 
@@ -546,6 +545,7 @@ contains
   use clm_varcon, only : spval, re
   use domainMod , only : domain_type
   use clm_varsur  , only : wtxy, vegxy, topoxy, pctspec
+  use clm_varctl
 ! !ARGUMENTS:
     implicit none
     integer :: n, begg, endg
@@ -601,7 +601,7 @@ contains
 !
 ! !USES:
     use clm_varctl  , only : create_crop_landunit
-    use pftvarcon   , only : nirrig, npcropmin
+    use clm45_pftvarcon   , only : nirrig, npcropmin
     use spmdMod     , only : mpicom, MPI_LOGICAL, MPI_LOR
 !
 ! !ARGUMENTS:
@@ -715,6 +715,8 @@ contains
 ! !USES:
   use clm_varcon, only : spval, re
   use domainMod , only : domain_type
+  use clm_varsur  , only : wtxy, vegxy, topoxy, pctspec
+  use clm45_pftvarcon   , only : noveg 
 ! !ARGUMENTS:
     implicit none
     integer :: n
