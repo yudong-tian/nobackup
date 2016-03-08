@@ -49,7 +49,7 @@ module clm45_lsmMod
     use decompMod       
     use domainMod       , only : domain_check, ldomain, domain_init
     use spmdMod         , only : masterproc
-    use UrbanInputMod
+    use clm45_UrbanInputMod
 
   ! LIS modules
   use clm45_module
@@ -305,7 +305,7 @@ contains
      endif
 
     ! Initialize urban model input (initialize urbinp data structure)
-    call UrbanInput(mode='initialize')
+    call clm45_UrbanInput(n, mode='initialize')
 
     ! Allocate surface grid dynamic memory (for wtxy and vegxy arrays)
     ! Allocate additional dynamic memory for glacier_mec topo and thickness
