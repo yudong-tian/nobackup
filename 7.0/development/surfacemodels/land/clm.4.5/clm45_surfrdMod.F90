@@ -87,7 +87,6 @@ contains
     use clm_varcon, only : spval, re
     use domainMod , only : domain_type, domain_init, domain_clean, lon1d, lat1d
     use decompMod , only : get_proc_bounds
-    use fileutils , only : getfil
 !
 ! !ARGUMENTS:
     implicit none
@@ -154,7 +153,6 @@ contains
 !
 ! !USES:
     use domainMod , only : domain_type
-    use fileutils , only : getfil
 !
 ! !ARGUMENTS:
     implicit none
@@ -226,7 +224,6 @@ contains
 ! !USES:
     use clm_varctl  , only : allocate_all_vegpfts, create_crop_landunit
     use pftvarcon   , only : noveg
-    use fileutils   , only : getfil
     use domainMod   , only : domain_type, domain_init, domain_clean
 !
 ! !ARGUMENTS:
@@ -275,63 +272,6 @@ contains
     ! Read surface data
      call read_clm45_param_to_local_g1d_int(nn, ldomain%pftm, 'PFTDATA_MASK')
 
-
-! YDT: needed? 
-#if 0 
-    ! Check if fsurdat grid is "close" to fatmlndfrc grid, exit if lats/lon > 0.001
-    call check_var(ncid=ncid, varname='xc', vardesc=vardesc, readvar=readvar) 
-    if (readvar) then
-       istype_domain = .true.
-    else
-       call check_var(ncid=ncid, varname='LONGXY', vardesc=vardesc, readvar=readvar) 
-       if (readvar) then
-          istype_domain = .false.
-       else
-          call endrun( trim(subname)//' ERROR: unknown domain type')
-       end if
-    end if
-    if (istype_domain) then
-       lon_var  = 'xc'
-       lat_var  = 'yc'
-    else
-       lon_var  = 'LONGXY'
-       lat_var  = 'LATIXY'
-    end if
-    if ( masterproc )then
-       write(LIS_logunit,*) trim(subname),' lon_var = ',trim(lon_var),' lat_var =',trim(lat_var)
-    end if
-
-    call ncd_inqfdims(ncid, isgrid2d, ni, nj, ns)
-    call domain_init(surfdata_domain, isgrid2d, ni, nj, begg, endg, clmlevel=grlnd)
-
-    call ncd_io(ncid=ncid, varname=lon_var, flag='read', data=surfdata_domain%lonc, &
-         dim1name=grlnd, readvar=readvar)
-    if (.not. readvar) call endrun( trim(subname)//' ERROR: lon var NOT on surface dataset' )
-
-    call ncd_io(ncid=ncid, varname=lat_var, flag='read', data=surfdata_domain%latc, &
-         dim1name=grlnd, readvar=readvar)
-    if (.not. readvar) call endrun( trim(subname)//' ERROR: lat var NOT on surface dataset' )
-
-    rmaxlon = 0.0_r8
-    rmaxlat = 0.0_r8
-    do n = begg,endg
-       if (ldomain%lonc(n)-surfdata_domain%lonc(n) > 300.) then
-          rmaxlon = max(rmaxlon,abs(ldomain%lonc(n)-surfdata_domain%lonc(n)-360._r8))
-       elseif (ldomain%lonc(n)-surfdata_domain%lonc(n) < -300.) then
-          rmaxlon = max(rmaxlon,abs(ldomain%lonc(n)-surfdata_domain%lonc(n)+360._r8))
-       else
-          rmaxlon = max(rmaxlon,abs(ldomain%lonc(n)-surfdata_domain%lonc(n)))
-       endif
-       rmaxlat = max(rmaxlat,abs(ldomain%latc(n)-surfdata_domain%latc(n)))
-    enddo
-    if (rmaxlon > 0.001_r8 .or. rmaxlat > 0.001_r8) then
-       write(LIS_logunit,*) trim(subname)//': surfdata/fatmgrid lon/lat mismatch error',&
-            rmaxlon,rmaxlat
-       call endrun(trim(subname))
-    end if
-    call domain_clean(surfdata_domain)
-
-#endif
 
     ! Obtain special landunit info
 

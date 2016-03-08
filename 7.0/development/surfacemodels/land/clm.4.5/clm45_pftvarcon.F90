@@ -194,7 +194,7 @@ contains
 !
 ! !USES:
     use netcdf
-    use fileutils , only : getfil
+!    use fileutils , only : getfil
 !    use ncdio_pio , only : ncd_io, ncd_pio_closefile, ncd_pio_openfile, file_desc_t, &
 !                           ncd_inqdid, ncd_inqdlen
     use clm_varctl, only : fpftcon

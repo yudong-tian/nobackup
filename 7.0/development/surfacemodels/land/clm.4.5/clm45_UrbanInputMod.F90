@@ -77,7 +77,6 @@ contains
 ! !USES:
     use clm_varpar, only : numrad, nlevurb, numurbl
     use clm_varctl, only : fsurdat, single_column
-    use fileutils , only : getavu, relavu, getfil, opnfil
     use spmdMod   , only : masterproc
     use clmtype ,   only : grlnd
     use decompMod , only : get_proc_bounds
