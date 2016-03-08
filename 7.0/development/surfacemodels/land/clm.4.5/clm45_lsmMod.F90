@@ -43,6 +43,7 @@ module clm45_lsmMod
     use clm_varctl      , only : fsurdat, fatmlndfrc, flndtopo, fglcmask, noland, &
                                  create_glacier_mec_landunit
     use clm45_pftvarcon       , only : clm45_pftconrd
+    use clm45_surfrdMod
     use clm_atmlnd   ,   only : atm2lnd_type 
     use decompInitMod   , only : decompInit_lnd, decompInit_glcp
     use decompMod       
@@ -94,7 +95,7 @@ module clm45_lsmMod
 
   type, public :: clm45_type_dec
      character*100 :: clm_rfile
-     character*100 :: clm_vfile
+     character*256 :: clm_vfile
      character*100 :: clm_chtfile
      integer      :: clm45open 
      integer      :: count
@@ -307,7 +308,7 @@ contains
      endif
 
     ! Initialize urban model input (initialize urbinp data structure)
-!    call UrbanInput(mode='initialize')
+    call UrbanInput(mode='initialize')
 
     ! Allocate surface grid dynamic memory (for wtxy and vegxy arrays)
     ! Allocate additional dynamic memory for glacier_mec topo and thickness
@@ -546,6 +547,7 @@ contains
   use domainMod , only : domain_type
   use clm_varsur  , only : wtxy, vegxy, topoxy, pctspec
   use clm_varctl
+  use clm45_pftvarcon   , only : noveg 
 ! !ARGUMENTS:
     implicit none
     integer :: n, begg, endg
@@ -600,10 +602,12 @@ contains
 ! Determine wtxy and veg arrays for non-dynamic landuse mode
 !
 ! !USES:
-    use clm_varctl  , only : create_crop_landunit
-    use clm45_pftvarcon   , only : nirrig, npcropmin
+    use clm_varctl  , only : create_crop_landunit, fpftdyn, irrigate
+    use clm45_pftvarcon   , only : nc3crop, nc3irrig, npcropmin, &
+                             ncorn, ncornirrig, nsoybean, nsoybeanirrig, &
+                             nscereal, nscerealirrig, nwcereal, nwcerealirrig
     use spmdMod     , only : mpicom, MPI_LOGICAL, MPI_LOR
-!
+
 ! !ARGUMENTS:
     implicit none
     integer          ,intent(in)    :: n     ! nest 
@@ -637,7 +641,7 @@ contains
     !YDT call check_dim(ncid, 'lsmpft', numpft+1)
 
     allocate(arrayl(begg:endg,0:numpft))
-    call read_clm45_param_to_local_g2d(n, array1, 'PCT_PFT', 'lsmpft') 
+    call read_clm45_param_to_local_g2d(n, arrayl, 'PCT_PFT', 'lsmpft') 
     pctpft(begg:endg,0:numpft) = arrayl(begg:endg,0:numpft)
     deallocate(arrayl)
 
@@ -648,25 +652,20 @@ contains
           ! (convert pctpft from percent with respect to gridcel to percent with
           ! respect to vegetated landunit)
 
-          if (pctspec(nl) < 100._r8) then
+          ! THESE CHECKS NEEDS TO BE THE SAME AS IN pftdynMod.F90!
+          if (pctspec(nl) < 100._r8 * (1._r8 - eps_fact*epsilon(1._r8))) then  ! pctspec not within eps_fact*epsilon of 100
              sumpct = 0._r8
              do m = 0,numpft
                 sumpct = sumpct + pctpft(nl,m) * 100._r8/(100._r8-pctspec(nl))
-                if (m == nirrig .and. .not. create_crop_landunit) then
-                   if (pctpft(nl,m) > 0._r8) then
-                      call endrun( trim(subname)//' ERROR surfrdMod: irrigated crop'// &
-                                   ' PFT requires create_crop_landunit=.true.' )
-                   end if
-                end if
              end do
              if (abs(sumpct - 100._r8) > 0.1e-4_r8) then
-                write(iulog,*) trim(subname)//' ERROR: sum(pct) over numpft+1 is not = 100.'
-                write(iulog,*) sumpct, sumpct-100._r8, nl
+                write(LIS_logunit,*) trim(subname)//' ERROR: sum(pct) over numpft+1 is not = 100.'
+                write(LIS_logunit,*) sumpct, sumpct-100._r8, nl
                 call endrun()
              end if
              if (sumpct < -0.000001_r8) then
-                write(iulog,*) trim(subname)//' ERROR: sum(pct) over numpft+1 is < 0.'
-                write(iulog,*) sumpct, nl
+                write(LIS_logunit,*) trim(subname)//' ERROR: sum(pct) over numpft+1 is < 0.'
+                write(LIS_logunit,*) sumpct, nl
                 call endrun()
              end if
              do m = npcropmin, numpft
@@ -684,20 +683,49 @@ contains
        end if
     end do
 
-
-!YDT needed?
-#if 0 
     call mpi_allreduce(crop,crop_prog,1,MPI_LOGICAL,MPI_LOR,mpicom,ier)
     if (ier /= 0) then
-       write(iulog,*) trim(subname)//' mpi_allreduce error = ',ier
+       write(LIS_logunit,*) trim(subname)//' mpi_allreduce error = ',ier
        call endrun( trim(subname)//' ERROR: error in reduce of crop_prog' )
     endif
     if (crop_prog .and. .not. create_crop_landunit) then
        call endrun( trim(subname)//' ERROR: prognostic crop '// &
-                    'PFTs requires create_crop_landunit=.true.' )
+                    'PFTs require create_crop_landunit=.true.' )
+    end if
+    if (crop_prog .and. fpftdyn /= ' ') &
+       call endrun( trim(subname)//' ERROR: prognostic crop '// &
+                    'is incompatible with transient landuse' )
+    if (.not. crop_prog .and. irrigate) then
+       call endrun( trim(subname)//' ERROR surfrdMod: irrigate = .true. requires CROP model active.' )
     end if
 
-#endif
+    if (masterproc .and. crop_prog .and. .not. irrigate) then
+       write(LIS_logunit,*) trim(subname)//' crop=.T. and irrigate=.F., so merging irrigated pfts with rainfed' ! in the following do-loop
+    end if
+
+! repeat do-loop for error checking and for rainfed crop case
+
+    do nl = begg,endg
+       if (pftm(nl) >= 0) then
+          if (pctspec(nl) < 100._r8 * (1._r8 - eps_fact*epsilon(1._r8))) then  ! pctspec not within eps_fact*epsilon of 100
+             if (.not. crop_prog .and. wtxy(nl,nc3irrig+1) > 0._r8) then
+                call endrun( trim(subname)//' ERROR surfrdMod: irrigated crop PFT requires CROP model active.' )
+             end if
+             if (crop_prog .and. .not. irrigate) then
+                wtxy(nl,nc3crop+1)       = wtxy(nl,nc3crop+1)  + wtxy(nl,nc3irrig+1)
+                wtxy(nl,nc3irrig+1)      = 0._r8
+                wtxy(nl,ncorn+1)         = wtxy(nl,ncorn+1)    + wtxy(nl,ncornirrig+1)
+                wtxy(nl,ncornirrig+1)    = 0._r8
+                wtxy(nl,nscereal+1)      = wtxy(nl,nscereal+1) + wtxy(nl,nscerealirrig+1)
+                wtxy(nl,nscerealirrig+1) = 0._r8
+                wtxy(nl,nwcereal+1)      = wtxy(nl,nwcereal+1) + wtxy(nl,nwcerealirrig+1)
+                wtxy(nl,nwcerealirrig+1) = 0._r8
+                wtxy(nl,nsoybean+1)      = wtxy(nl,nsoybean+1) + wtxy(nl,nsoybeanirrig+1)
+                wtxy(nl,nsoybeanirrig+1) = 0._r8
+             end if
+          end if
+       end if
+    end do
 
     deallocate(pctpft)
 
@@ -716,10 +744,12 @@ contains
   use clm_varcon, only : spval, re
   use domainMod , only : domain_type
   use clm_varsur  , only : wtxy, vegxy, topoxy, pctspec
+  use clm_varpar
+  use UrbanInputMod
   use clm45_pftvarcon   , only : noveg 
 ! !ARGUMENTS:
     implicit none
-    integer :: n
+    integer :: n, nl, nurb
 
    integer  :: begg,endg                  ! gcell beg/end
     integer  :: dimid,varid                ! netCDF id's
