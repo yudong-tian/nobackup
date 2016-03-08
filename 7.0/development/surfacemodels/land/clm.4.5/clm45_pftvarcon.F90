@@ -10,13 +10,12 @@ module clm45_pftvarcon
 ! read and initialize vegetation (PFT) constants.
 !
 ! !USES:
-  use netcdf 
   use shr_kind_mod, only : r8 => shr_kind_r8
   use abortutils  , only : endrun
-  use clm_varpar  , only : mxpft, numpft, numrad, ivis, inir
-!YDT  use clm_varctl  , only : use_cn, use_cndv
+  use clm_varpar  , only : mxpft, numrad, ivis, inir
 
   use LIS_logMod,       only : LIS_verify, LIS_logunit
+
 !
 ! !PUBLIC TYPES:
   implicit none
@@ -43,18 +42,20 @@ module clm45_pftvarcon
   integer :: nc3_nonarctic_grass    !value for C3 non-arctic grass
   integer :: nc4_grass              !value for C4 grass
   integer :: npcropmin              !value for first crop
-  integer :: ncorn                  !value for corn
-  integer :: nscereal               !value for spring temperate cereal
-  integer :: nwcereal               !value for winter temperate cereal
-  integer :: nsoybean               !value for soybean
+  integer :: ncorn                  !value for corn, rain fed (rf)
+  integer :: ncornirrig             !value for corn, irrigated (ir)
+  integer :: nscereal               !value for spring temperate cereal (rf)
+  integer :: nscerealirrig          !value for spring temperate cereal (ir)
+  integer :: nwcereal               !value for winter temperate cereal (rf)
+  integer :: nwcerealirrig          !value for winter temperate cereal (ir)
+  integer :: nsoybean               !value for soybean (rf)
+  integer :: nsoybeanirrig          !value for soybean (ir)
   integer :: npcropmax              !value for last prognostic crop in list
-  integer :: nc3crop                !value for generic crop
-  integer :: nirrig                 !value for irrigated generic crop
+  integer :: nc3crop                !value for generic crop (rf)
+  integer :: nc3irrig               !value for irrigated generic crop (ir)
 
   real(r8):: dleaf(0:mxpft)       !characteristic leaf dimension (m)
   real(r8):: c3psn(0:mxpft)       !photosynthetic pathway: 0. = c4, 1. = c3
-  real(r8):: mp(0:mxpft)          !slope of conductance-to-photosynthesis relationship
-  real(r8):: qe25(0:mxpft)        !quantum efficiency at 25C (umol CO2 / umol photon)
   real(r8):: xl(0:mxpft)          !leaf/stem orientation index
   real(r8):: rhol(0:mxpft,numrad) !leaf reflectance: 1=vis, 2=nir
   real(r8):: rhos(0:mxpft,numrad) !stem reflectance: 1=vis, 2=nir
@@ -81,6 +82,7 @@ module clm45_pftvarcon
   real(r8):: deadwdcn(0:mxpft)     !dead wood (xylem and heartwood) C:N (gC/gN)
   real(r8):: grperc(0:mxpft)       !growth respiration parameter
   real(r8):: grpnow(0:mxpft)       !growth respiration parameter
+  real(r8):: rootprof_beta(0:mxpft)   !CLM rooting distribution parameter for C and N inputs [unitless]
 
 ! for crop
   real(r8):: graincn(0:mxpft)      !grain C:N (gC/gN)
@@ -128,9 +130,25 @@ module clm45_pftvarcon
   real(r8):: pprod10(0:mxpft)      !proportion of deadstem to 10-yr product pool
   real(r8):: pprod100(0:mxpft)     !proportion of deadstem to 100-yr product pool
   real(r8):: pprodharv10(0:mxpft)  !harvest mortality proportion of deadstem to 10-yr pool
-
-  ! new pft parameters for CN-fire code
-  real(r8):: resist(0:mxpft)       !resistance to fire (no units)
+  ! pft paraemeters for fire code
+  real(r8):: cc_leaf(0:mxpft)
+  real(r8):: cc_lstem(0:mxpft)
+  real(r8):: cc_dstem(0:mxpft)
+  real(r8):: cc_other(0:mxpft)
+  real(r8):: fm_leaf(0:mxpft)
+  real(r8):: fm_lstem(0:mxpft)
+  real(r8):: fm_dstem(0:mxpft)
+  real(r8):: fm_other(0:mxpft)
+  real(r8):: fm_root(0:mxpft)
+  real(r8):: fm_lroot(0:mxpft)
+  real(r8):: fm_droot(0:mxpft)
+  real(r8):: fsr_pft(0:mxpft)
+  real(r8):: fd_pft(0:mxpft)
+  ! pft parameters for crop code
+  real(r8):: fertnitro(0:mxpft)    !fertilizer
+  real(r8):: fleafcn(0:mxpft)      !C:N during grain fill; leaf
+  real(r8):: ffrootcn(0:mxpft)     !C:N during grain fill; fine root
+  real(r8):: fstemcn(0:mxpft)      !C:N during grain fill; stem
 
   ! pft parameters for CNDV code
   ! from LPJ subroutine pftparameters
@@ -155,7 +173,8 @@ module clm45_pftvarcon
 ! 10/21/03, Peter Thornton: Added new variables for CN code
 ! 06/24/09, Erik Kluzek: Add indices for all pft types, and add expected_pftnames array and comparision
 ! 09/17/10, David Lawrence: Modified code to read in netCDF pft physiology file
-! 02/29/16, Yudong Tian, rewrite for LIS 
+
+! 03/8/16, Yudong Tian, rewrite for LIS
 !
 !EOP
 !-----------------------------------------------------------------------
@@ -174,11 +193,13 @@ contains
 ! Read and initialize vegetation (PFT) constants
 !
 ! !USES:
+    use netcdf
     use fileutils , only : getfil
+!    use ncdio_pio , only : ncd_io, ncd_pio_closefile, ncd_pio_openfile, file_desc_t, &
+!                           ncd_inqdid, ncd_inqdlen
     use clm_varctl, only : fpftcon
     use clm_varcon, only : tfrz
     use spmdMod   , only : masterproc
-    use clm_varpar  , only : mxpft, numpft, numrad, ivis, inir
 !
 ! !ARGUMENTS:
     implicit none
@@ -188,14 +209,16 @@ contains
 !
 ! !REVISION HISTORY:
 ! Created by Gordon Bonan
-!
+!F. Li and S. Levis (11/06/12)
 !
 ! !LOCAL VARIABLES:
 !EOP
-    character(len=*) :: locfn ! input file name 
+    character(len=256) :: locfn ! local file name
     integer :: i,n              ! loop indices
-    integer :: ier, ios             ! error code
-    integer :: ftn, dimid            ! netCDF dimension id
+    integer :: ier, ios              ! error code
+!    type(file_desc_t) :: ncid   ! pio netCDF file id
+    integer :: ncid   ! pio netCDF file id
+    integer :: dimid            ! netCDF dimension id
     integer :: npft             ! number of pfts on pft-physiology file
     logical :: readv            ! read variable in or not
     character(len=32) :: subname = 'pftconrd'              ! subroutine name
@@ -206,9 +229,7 @@ contains
     !       and finally crops, ending with soybean
     ! DO NOT CHANGE THE ORDER -- WITHOUT MODIFYING OTHER PARTS OF THE CODE WHERE THE ORDER MATTERS!
     !
-
-    !character(len=40), parameter :: expected_pftnames(0:mxpft) = (/ &
-    character(len=40), parameter :: expected_pftnames(0:20) = (/ &
+    character(len=40), parameter :: expected_pftnames(0:mxpft) = (/ &
                  'not_vegetated                      '  &
                , 'needleleaf_evergreen_temperate_tree'  &
                , 'needleleaf_evergreen_boreal_tree   '  &
@@ -227,11 +248,14 @@ contains
                , 'c3_crop                            '  &
                , 'c3_irrigated                       '  &
                , 'corn                               '  &
+               , 'irrigated_corn                     '  &
                , 'spring_temperate_cereal            '  &
+               , 'irrigated_spring_temperate_cereal  '  &
                , 'winter_temperate_cereal            '  &
+               , 'irrigated_winter_temperate_cereal  '  &
                , 'soybean                            '  &
+               , 'irrigated_soybean                  '  &
     /)
-
 !-----------------------------------------------------------------------
 
     ! Set specific vegetation type values
@@ -239,184 +263,221 @@ contains
     if (masterproc) then
        write(LIS_logunit,*) 'Attempting to read PFT physiological data .....'
     end if
-    ios = nf90_open(path=locfn, &
-             mode=NF90_NOWRITE,ncid=ftn)
-    call LIS_verify(ios,'Error in nf90_open in read_clm45_params:paramfile')
-    ! YDT: seems no use 
-    !call ncd_inqdid(ncid,'pft',dimid)
-    !call ncd_inqdlen(ncid,dimid,npft)
 
-    call clm45_pft_io_char('pftname',pftname, 'read', ftn, readvar=readv, posNOTonfile=.true.) 
+    ios = nf90_open(path=locfn, &
+             mode=NF90_NOWRITE,ncid=ncid)
+    call LIS_verify(ios,'Error in nf90_open in read_clm45_params:paramfile')
+
+!YDT
+!    call getfil (fpftcon, locfn, 0)
+!    call ncd_pio_openfile (ncid, trim(locfn), 0)
+!    call ncd_inqdid(ncid,'pft',dimid)
+!    call ncd_inqdlen(ncid,dimid,npft)
+
+    call clm45_pft_io_char('pftname',pftname, 'read', ncid, readvar=readv, posNOTonfile=.true.) 
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('z0mr',z0mr, 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('z0mr',z0mr, 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('displar',displar, 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('displar',displar, 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('dleaf',dleaf, 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('dleaf',dleaf, 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('c3psn',c3psn, 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('c3psn',c3psn, 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('mp',mp, 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('rholvis',rhol(:,ivis), 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('qe25',qe25, 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('rholnir',rhol(:,inir), 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('rholvis',rhol(:,ivis), 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('rhosvis',rhos(:,ivis), 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('rholnir',rhol(:,inir), 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('rhosnir', rhos(:,inir), 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('rhosvis',rhos(:,ivis), 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('taulvis',taul(:,ivis), 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('rhosnir', rhos(:,inir), 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('taulnir',taul(:,inir), 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('taulvis',taul(:,ivis), 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('tausvis',taus(:,ivis), 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('taulnir',taul(:,inir), 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('tausnir',taus(:,inir), 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('tausvis',taus(:,ivis), 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('xl',xl, 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('tausnir',taus(:,inir), 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('roota_par',roota_par, 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('xl',xl, 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('rootb_par',rootb_par, 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('roota_par',roota_par, 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('slatop',slatop, 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('rootb_par',rootb_par, 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('dsladlai',dsladlai, 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('slatop',slatop, 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('leafcn',leafcn, 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('dsladlai',dsladlai, 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('flnr',flnr, 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('leafcn',leafcn, 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('smpso',smpso, 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('flnr',flnr, 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('smpsc',smpsc, 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('smpso',smpso, 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('fnitr',fnitr, 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('smpsc',smpsc, 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('woody',woody, 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('fnitr',fnitr, 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('lflitcn',lflitcn, 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('woody',woody, 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('frootcn',frootcn, 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('lflitcn',lflitcn, 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('livewdcn',livewdcn, 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('frootcn',frootcn, 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('deadwdcn',deadwdcn, 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('livewdcn',livewdcn, 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('grperc',grperc, 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('deadwdcn',deadwdcn, 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('grpnow',grpnow, 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('grperc',grperc, 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('froot_leaf',froot_leaf, 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('grpnow',grpnow, 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('stem_leaf',stem_leaf, 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('froot_leaf',froot_leaf, 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('croot_stem',croot_stem, 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('stem_leaf',stem_leaf, 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('flivewd',flivewd, 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('croot_stem',croot_stem, 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('fcur',fcur, 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('flivewd',flivewd, 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('fcurdv',fcurdv, 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('fcur',fcur, 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('lf_flab',lf_flab, 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('fcurdv',fcurdv, 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('lf_fcel',lf_fcel, 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('lf_flab',lf_flab, 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('lf_flig',lf_flig, 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('lf_fcel',lf_fcel, 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('fr_flab',fr_flab, 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('lf_flig',lf_flig, 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('fr_fcel',fr_fcel, 'read', ncid, readvar=readv, posNOTonfile=.true.)    
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('fr_flab',fr_flab, 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('fr_flig',fr_flig, 'read', ncid, readvar=readv, posNOTonfile=.true.)    
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('fr_fcel',fr_fcel, 'read', ftn, readvar=readv, posNOTonfile=.true.)    
+    call clm45_pft_io('leaf_long',leaf_long, 'read', ncid, readvar=readv, posNOTonfile=.true.)    
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('fr_flig',fr_flig, 'read', ftn, readvar=readv, posNOTonfile=.true.)    
+    call clm45_pft_io('evergreen',evergreen, 'read', ncid, readvar=readv, posNOTonfile=.true.)    
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('leaf_long',leaf_long, 'read', ftn, readvar=readv, posNOTonfile=.true.)    
+    call clm45_pft_io('stress_decid',stress_decid, 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('evergreen',evergreen, 'read', ftn, readvar=readv, posNOTonfile=.true.)    
+    call clm45_pft_io('season_decid',season_decid, 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('stress_decid',stress_decid, 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('pftpar20',pftpar20, 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('season_decid',season_decid, 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('pftpar28',pftpar28, 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('resist',resist, 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('pftpar29',pftpar29, 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('pftpar20',pftpar20, 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('pftpar30',pftpar30, 'read', ncid, readvar=readv, posNOTonfile=.true.)  
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('pftpar28',pftpar28, 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('pftpar31',pftpar31, 'read', ncid, readvar=readv, posNOTonfile=.true.)  
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('pftpar29',pftpar29, 'read', ftn, readvar=readv, posNOTonfile=.true.)
+    call clm45_pft_io('fertnitro',fertnitro, 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('pftpar30',pftpar30, 'read', ftn, readvar=readv, posNOTonfile=.true.)  
+    call clm45_pft_io('fleafcn',fleafcn, 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('pftpar31',pftpar31, 'read', ftn, readvar=readv, posNOTonfile=.true.)  
+    call clm45_pft_io('ffrootcn',ffrootcn, 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('pconv',pconv, 'read', ftn, readvar=readv)  
+    call clm45_pft_io('fstemcn',fstemcn, 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('pprod10',pprod10, 'read', ftn, readvar=readv)  
+#ifdef VERTSOILC
+    call clm45_pft_io('rootprof_beta',rootprof_beta, 'read', ncid, readvar=readv, posNOTonfile=.true.)
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('pprodharv10',pprodharv10, 'read', ftn, readvar=readv)  
+#endif
+    call clm45_pft_io('pconv',pconv, 'read', ncid, readvar=readv)  
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('pprod100',pprod100, 'read', ftn, readvar=readv)  
+    call clm45_pft_io('pprod10',pprod10, 'read', ncid, readvar=readv)  
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('graincn',graincn, 'read', ftn, readvar=readv)  
+    call clm45_pft_io('pprodharv10',pprodharv10, 'read', ncid, readvar=readv)  
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('mxtmp',mxtmp, 'read', ftn, readvar=readv)  
+    call clm45_pft_io('pprod100',pprod100, 'read', ncid, readvar=readv)  
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('baset',baset, 'read', ftn, readvar=readv)  
+    call clm45_pft_io('graincn',graincn, 'read', ncid, readvar=readv)  
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('declfact',declfact, 'read', ftn, readvar=readv)  
+    call clm45_pft_io('mxtmp',mxtmp, 'read', ncid, readvar=readv)  
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('bfact',bfact, 'read', ftn, readvar=readv)  
+    call clm45_pft_io('baset',baset, 'read', ncid, readvar=readv)  
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('aleaff',aleaff, 'read', ftn, readvar=readv)  
+    call clm45_pft_io('declfact',declfact, 'read', ncid, readvar=readv)  
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('arootf',arootf, 'read', ftn, readvar=readv)  
+    call clm45_pft_io('bfact',bfact, 'read', ncid, readvar=readv)  
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('astemf',astemf, 'read', ftn, readvar=readv)  
+    call clm45_pft_io('aleaff',aleaff, 'read', ncid, readvar=readv)  
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('arooti',arooti, 'read', ftn, readvar=readv)  
+    call clm45_pft_io('arootf',arootf, 'read', ncid, readvar=readv)  
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('fleafi',fleafi, 'read', ftn, readvar=readv)  
+    call clm45_pft_io('astemf',astemf, 'read', ncid, readvar=readv)  
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('allconsl',allconsl, 'read', ftn, readvar=readv)  
+    call clm45_pft_io('arooti',arooti, 'read', ncid, readvar=readv)  
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('allconss',allconss, 'read', ftn, readvar=readv)  
+    call clm45_pft_io('fleafi',fleafi, 'read', ncid, readvar=readv)  
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('crop',crop, 'read', ftn, readvar=readv)  
+    call clm45_pft_io('allconsl',allconsl, 'read', ncid, readvar=readv)  
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('irrigated',irrigated, 'read', ftn, readvar=readv)  
+    call clm45_pft_io('allconss',allconss, 'read', ncid, readvar=readv)  
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('ztopmx',ztopmx, 'read', ftn, readvar=readv)  
+    call clm45_pft_io('crop',crop, 'read', ncid, readvar=readv)  
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('laimx',laimx, 'read', ftn, readvar=readv)  
+    call clm45_pft_io('irrigated',irrigated, 'read', ncid, readvar=readv)  
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('gddmin',gddmin, 'read', ftn, readvar=readv)  
+    call clm45_pft_io('ztopmx',ztopmx, 'read', ncid, readvar=readv)  
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('hybgdd',hybgdd, 'read', ftn, readvar=readv)  
+    call clm45_pft_io('laimx',laimx, 'read', ncid, readvar=readv)  
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('lfemerg',lfemerg, 'read', ftn, readvar=readv)  
+    call clm45_pft_io('gddmin',gddmin, 'read', ncid, readvar=readv)  
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('grnfill',grnfill, 'read', ftn, readvar=readv)  
+    call clm45_pft_io('hybgdd',hybgdd, 'read', ncid, readvar=readv)  
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io_int('mxmat',mxmat, 'read', ftn, readvar=readv)  
+    call clm45_pft_io('lfemerg',lfemerg, 'read', ncid, readvar=readv)  
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('planting_temp',planttemp, 'read', ftn, readvar=readv)  
+    call clm45_pft_io('grnfill',grnfill, 'read', ncid, readvar=readv)  
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io('min_planting_temp',minplanttemp, 'read', ftn, readvar=readv)  
+    call clm45_pft_io_int('mxmat',mxmat, 'read', ncid, readvar=readv)  
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io_int('min_NH_planting_date',mnNHplantdate, 'read', ftn, readvar=readv)  
+    call clm45_pft_io('cc_leaf', cc_leaf, 'read', ncid, readvar=readv)  
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io_int('min_SH_planting_date',mnSHplantdate, 'read', ftn, readvar=readv)  
+    call clm45_pft_io('cc_lstem',cc_lstem, 'read', ncid, readvar=readv)  
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io_int('max_NH_planting_date',mxNHplantdate, 'read', ftn, readvar=readv)  
+    call clm45_pft_io('cc_dstem',cc_dstem, 'read', ncid, readvar=readv)  
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    call clm45_pft_io_int('max_SH_planting_date',mxSHplantdate, 'read', ftn, readvar=readv)  
+    call clm45_pft_io('cc_other',cc_other, 'read', ncid, readvar=readv)  
     if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
-    ios = nf90_close(ftn) 
+    call clm45_pft_io('fm_leaf', fm_leaf, 'read', ncid, readvar=readv)  
+    if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
+    call clm45_pft_io('fm_lstem',fm_lstem, 'read', ncid, readvar=readv)  
+    if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
+    call clm45_pft_io('fm_dstem',fm_dstem, 'read', ncid, readvar=readv)  
+    if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
+    call clm45_pft_io('fm_other',fm_other, 'read', ncid, readvar=readv)  
+    if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
+    call clm45_pft_io('fm_root', fm_root, 'read', ncid, readvar=readv)  
+    if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
+    call clm45_pft_io('fm_lroot',fm_lroot, 'read', ncid, readvar=readv)  
+    if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
+    call clm45_pft_io('fm_droot',fm_droot, 'read', ncid, readvar=readv)  
+    if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
+    call clm45_pft_io('fsr_pft', fsr_pft, 'read', ncid, readvar=readv)  
+    if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
+    call clm45_pft_io('fd_pft',  fd_pft, 'read', ncid, readvar=readv)  
+    if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
+    call clm45_pft_io('planting_temp',planttemp, 'read', ncid, readvar=readv)  
+    if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
+    call clm45_pft_io('min_planting_temp',minplanttemp, 'read', ncid, readvar=readv)  
+    if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
+    call clm45_pft_io_int('min_NH_planting_date',mnNHplantdate, 'read', ncid, readvar=readv)  
+    if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
+    call clm45_pft_io_int('min_SH_planting_date',mnSHplantdate, 'read', ncid, readvar=readv)  
+    if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
+    call clm45_pft_io_int('max_NH_planting_date',mxNHplantdate, 'read', ncid, readvar=readv)  
+    if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
+    call clm45_pft_io_int('max_SH_planting_date',mxSHplantdate, 'read', ncid, readvar=readv)  
+    if ( .not. readv ) call endrun( trim(subname)//' ERROR: error in reading in pft data' )
+    !call ncd_pio_closefile(ncid)
+    ios = nf90_close(ncid) 
 
     do i = 0, mxpft
        if ( trim(adjustl(pftname(i))) /= trim(expected_pftnames(i)) )then
@@ -440,21 +501,24 @@ contains
        if ( trim(pftname(i)) == 'c3_non-arctic_grass'                 ) nc3_nonarctic_grass  = i
        if ( trim(pftname(i)) == 'c4_grass'                            ) nc4_grass            = i
        if ( trim(pftname(i)) == 'c3_crop'                             ) nc3crop              = i
-       if ( trim(pftname(i)) == 'c3_irrigated'                        ) nirrig               = i
+       if ( trim(pftname(i)) == 'c3_irrigated'                        ) nc3irrig               = i
        if ( trim(pftname(i)) == 'corn'                                ) ncorn                = i
+       if ( trim(pftname(i)) == 'irrigated_corn'                      ) ncornirrig           = i
        if ( trim(pftname(i)) == 'spring_temperate_cereal'             ) nscereal             = i
+       if ( trim(pftname(i)) == 'irrigated_spring_temperate_cereal'   ) nscerealirrig        = i
        if ( trim(pftname(i)) == 'winter_temperate_cereal'             ) nwcereal             = i
+       if ( trim(pftname(i)) == 'irrigated_winter_temperate_cereal'   ) nwcerealirrig        = i
        if ( trim(pftname(i)) == 'soybean'                             ) nsoybean             = i
+       if ( trim(pftname(i)) == 'irrigated_soybean'                   ) nsoybeanirrig        = i
     end do
 
     ntree                = nbrdlf_dcd_brl_tree  ! value for last type of tree
     npcropmin            = ncorn                ! first prognostic crop
-    npcropmax            = nsoybean             ! last prognostic crop in list
+    npcropmax            = nsoybeanirrig        ! last prognostic crop in list
 
-!YDT
-!    if (use_cndv) then
-!       fcur(:) = fcurdv(:)
-!    end if
+#if (defined CNDV)
+    fcur(:) = fcurdv(:)
+#endif
 
     !
     ! Do some error checking
@@ -463,7 +527,11 @@ contains
        call endrun( trim(subname)//' ERROR: npcropmax is NOT the last value' )
     end if
     do i = 0, mxpft
-       if (     (irrigated(i) == 1.0_r8) .and. i == nirrig )then
+       if (      irrigated(i) == 1.0_r8  .and. (i == nc3irrig .or. &
+                                                i == ncornirrig .or. &
+                                                i == nscerealirrig .or. &
+                                                i == nwcerealirrig .or. &
+                                                i == nsoybeanirrig) )then
           ! correct
        else if ( irrigated(i) == 0.0_r8 )then
           ! correct
@@ -500,8 +568,9 @@ contains
 !
 ! !INTERFACE:
   subroutine clm45_pft_io(varname, data, flag, ncid, readvar, nt, posNOTonfile)
+
+  use netcdf
 !
-! !DESCRIPTION:
 ! netcdf I/O of global integer variable
 ! YDT: rewritten from ncd_io_int_var0_nf
 !
@@ -515,15 +584,15 @@ contains
     integer, optional, intent(in)    :: nt        ! time sample index
     logical          , optional, intent(in) :: posNOTonfile ! position is NOT on this file
 !
-    
+
     integer  :: varid, ios
 
     ios = nf90_inq_varid(ncid, trim(varname), varid)
     call LIS_verify(ios, trim(varname)// ' field not found in the LIS param file')
-    ios = nf90_get_var(ncid, varid, data) 
+    ios = nf90_get_var(ncid, varid, data)
     call LIS_verify(ios, trim(varname)// ' field not found in the LIS param file')
-    readvar = .true. 
-   
+    readvar = .true.
+
     end subroutine clm45_pft_io
 
 !------------------------------------------------------------------------
@@ -533,6 +602,8 @@ contains
 !
 ! !INTERFACE:
   subroutine clm45_pft_io_int(varname, data, flag, ncid, readvar, nt, posNOTonfile)
+
+  use netcdf
 !
 ! !DESCRIPTION:
 ! netcdf I/O of global integer variable
@@ -559,7 +630,6 @@ contains
 
     end subroutine clm45_pft_io_int
 
-
 !------------------------------------------------------------------------
 !BOP
 !
@@ -568,6 +638,8 @@ contains
 ! !INTERFACE:
   subroutine clm45_pft_io_char(varname, data, flag, ncid, readvar, nt, posNOTonfile)
 !
+  use netcdf
+
 ! !DESCRIPTION:
 ! netcdf I/O of global integer variable
 ! YDT: rewritten from ncd_io_int_var0_nf
