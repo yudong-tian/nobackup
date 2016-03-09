@@ -45,8 +45,8 @@ module clm45_lsmMod
     use clm45_pftvarcon       , only : clm45_pftconrd
     use clm45_surfrdMod
     use clm_atmlnd   ,   only : atm2lnd_type 
-    use decompInitMod   , only : decompInit_lnd, decompInit_glcp
-    use decompMod       
+    use clm45_decompInitMod   , only : decompInit_lnd, decompInit_glcp
+    use clm45_decompMod       
     use domainMod       , only : domain_check, ldomain, domain_init
     use spmdMod         , only : masterproc
     use clm45_UrbanInputMod

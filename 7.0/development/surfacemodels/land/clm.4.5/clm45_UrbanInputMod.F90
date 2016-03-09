@@ -79,7 +79,7 @@ contains
     use clm_varctl, only : fsurdat, single_column
     use spmdMod   , only : masterproc
     use clmtype ,   only : grlnd
-    use decompMod , only : get_proc_bounds
+    use clm45_decompMod , only : get_proc_bounds
     use domainMod , only : ldomain
     use LIS_coreMod 
 !

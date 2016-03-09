@@ -28,7 +28,7 @@ module clm45_surfrdMod
   use clm_varctl  , only : glc_topomax, scmlat, scmlon, single_column, &
                            create_glacier_mec_landunit
   use clm_varsur  , only : wtxy, vegxy, topoxy, pctspec
-  use decompMod   , only : get_proc_bounds
+  use clm45_decompMod   , only : get_proc_bounds
   use clmtype
   use spmdMod                         
 
@@ -86,7 +86,7 @@ contains
 ! !USES:
     use clm_varcon, only : spval, re
     use domainMod , only : domain_type, domain_init, domain_clean, lon1d, lat1d
-    use decompMod , only : get_proc_bounds
+    use clm45_decompMod , only : get_proc_bounds
 !
 ! !ARGUMENTS:
     implicit none
@@ -223,7 +223,7 @@ contains
 !
 ! !USES:
     use clm_varctl  , only : allocate_all_vegpfts, create_crop_landunit
-    use pftvarcon   , only : noveg
+    use clm45_pftvarcon   , only : noveg
     use domainMod   , only : domain_type, domain_init, domain_clean
 !
 ! !ARGUMENTS:
@@ -841,7 +841,7 @@ contains
 ! Determine wtxy and vegxy for CNDV mode.
 !
 ! !USES:
-    use pftvarcon , only : noveg, crop
+    use clm45_pftvarcon , only : noveg, crop
     use clm_varctl, only : create_crop_landunit
 !
 ! !ARGUMENTS:
