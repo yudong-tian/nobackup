@@ -1,3 +1,5 @@
+#include "LIS_misc.h"
+
 module clm45_UrbanInputMod
 
 !----------------------------------------------------------------------- 
@@ -165,8 +167,8 @@ contains
           write(LIS_logunit,*)' Reading in urban input data from fsurdat file ...'
        end if
        
-      ios = nf90_open(path=LIS_rc%paramfile(n), mode=NF90_NOWRITE, ncid=ncid)
-      call LIS_verify(ios,'Error in nf90_open in Urbaninit:paramfile')
+      ios = nf90_open(path=LIS_rc%paramfile(nn), mode=NF90_NOWRITE, ncid=ncid)
+      call LIS_verify(ios,'Error in nf90_open in clm45_Urbaninit:paramfile')
 
        !2D: begg:endg,numurbl  
 

@@ -1,3 +1,5 @@
+#include "LIS_misc.h"
+
 module clm45_surfrdMod
 
 !-----------------------------------------------------------------------
@@ -315,7 +317,7 @@ contains
 !
 ! !USES:
     use clm45_pftvarcon     , only : noveg
-    use UrbanInputMod , only : urbinp
+    use clm45_UrbanInputMod , only : urbinp
     use clm_varpar    , only : maxpatch_glcmec, nlevurb
     use clm_varcon    , only : udens_base, udens_tbd, udens_hd, udens_md 
 !
@@ -738,7 +740,7 @@ contains
 !YDT    call check_dim(ncid, 'lsmpft', numpft+1)
 
     allocate(arrayl(begg:endg,0:numpft))
-    call read_clm45_param_to_local_g2d(n, arrayl, 'PCT_PFT', 'lsmpft')
+    call read_clm45_param_to_local_g2d(n, arrayl, 'PCT_PFT', 'lsmpft', zsindex=0)
     pctpft(begg:endg,0:numpft) = arrayl(begg:endg,0:numpft)
     deallocate(arrayl)
 
@@ -897,6 +899,7 @@ contains
    use LIS_timeMgrMod,   only : LIS_clock, LIS_calendar, &
         LIS_update_timestep, LIS_registerAlarm
    use LIS_logMod,       only : LIS_verify, LIS_logunit
+   use shr_sys_mod , only : shr_sys_flush
 ! !DESCRIPTION:
 ! Subroutine to read a global 2D variable from LDT into local variable, 1-D grid space.
 !
@@ -921,6 +924,8 @@ contains
     real    :: localvar(LIS_rc%lnc(n),LIS_rc%lnr(n))
 
 #if (defined USE_NETCDF3 || defined USE_NETCDF4)
+
+       write(LIS_logunit, *) "Reading surface parameter: ", trim(varname) 
 
           ios = nf90_open(path=LIS_rc%paramfile(n),&
                mode=NF90_NOWRITE,ncid=ftn)
@@ -958,7 +963,9 @@ contains
           do t = 1, LIS_rc%ntiles(n)
            g = LIS_domain(n)%tile(t)%index
            var(g) = localvar(LIS_domain(n)%tile(t)%col, LIS_domain(n)%tile(t)%row)
+           write(LIS_logunit, *) "g=", g, " var(g)= ", var(g)  
           end do
+          call shr_sys_flush(LIS_logunit)
           deallocate(globalvar)
 #endif
 
@@ -970,7 +977,7 @@ contains
 ! \label{read_clm45_param_to_local_g2d}
 !
 ! !INTERFACE:
-  subroutine read_clm45_param_to_local_g2d(n, var, varname, zdimname)
+  subroutine read_clm45_param_to_local_g2d(n, var, varname, zdimname, zsindex)
 ! !USES:
    use LIS_surfaceModelDataMod, only : LIS_sfmodel_struc
    use LIS_coreMod
@@ -985,6 +992,7 @@ contains
    integer, intent(in) :: n
    real(r8), pointer :: var(:, :)
    character(len=*), intent(in) :: varname, zdimname
+   integer, optional :: zsindex 
    integer :: t, g, gid, lastg, g0, i, j, ic0, ir0, gid0, lastgrid  ! how many tiles up to last grid
 
     integer                    :: ios
@@ -1000,6 +1008,7 @@ contains
     real,      allocatable     :: globalvar(:, :,:)
     real,      allocatable     :: localvar(:, :, :)
 
+   if ( .not. present(zsindex) ) zsindex = 1
 #if (defined USE_NETCDF3 || defined USE_NETCDF4)
 
           ios = nf90_open(path=LIS_rc%paramfile(n),&
@@ -1024,8 +1033,8 @@ contains
           ios = nf90_inquire_dimension(ftn,nzId, len=gnz)
           call LIS_verify(ios,'Error in nf90_inquire_dimension in read_clm45_params:nzId')
 
-          allocate(globalvar(gnc, gnr, 0:gnz))
-          allocate(localvar(LIS_rc%lnc(n),LIS_rc%lnr(n), 0:gnz))
+          allocate(globalvar(gnc, gnr, zsindex:gnz))
+          allocate(localvar(LIS_rc%lnc(n),LIS_rc%lnr(n), zsindex:gnz))
 
           ios = nf90_inq_varid(ftn, trim(varname), varid)
           call LIS_verify(ios, trim(varname)// ' field not found in the LIS param file')
@@ -1036,7 +1045,7 @@ contains
           ios = nf90_close(ftn)
           call LIS_verify(ios,'Error in nf90_close in read_clm45_params')
 
-          localvar(:,:) = &
+          localvar(:,:, :) = &
             globalvar(LIS_ews_halo_ind(n,LIS_localPet+1):&
             LIS_ewe_halo_ind(n,LIS_localPet+1), &
             LIS_nss_halo_ind(n,LIS_localPet+1): &
