@@ -231,7 +231,7 @@ contains
 ! !ARGUMENTS:
     implicit none
 
-    integer :: n, nn 
+    integer :: nn  ! nest 
 
     type(domain_type),intent(in) :: ldomain     ! land domain associated with wtxy
 !YDT    character(len=*), intent(in) :: lfsurdat    ! surface dataset filename
@@ -248,7 +248,7 @@ contains
     integer  :: vardesc              ! pio variable descriptor
     type(domain_type) :: surfdata_domain      ! local domain associated with surface dataset
     character(len=256):: locfn                ! local file name
-    integer           :: ni,nj,ns             ! domain sizes
+    integer           :: n, ni,nj,ns             ! domain sizes
     character(len=16) :: lon_var, lat_var     ! names of lat/lon on dataset
     logical           :: readvar              ! true => variable is on dataset
     real(r8)          :: rmaxlon,rmaxlat      ! local min/max vars
@@ -290,7 +290,7 @@ contains
 #else
     if (allocate_all_vegpfts) then
        !YDT call clm45_surfrd_wtxy_veg_all(ncid, ldomain%ns, ldomain%pftm)
-       call clm45_surfrd_wtxy_veg_all(n, ldomain%pftm)
+       call clm45_surfrd_wtxy_veg_all(nn, ldomain%pftm)
     else
        call endrun (trim(subname) // 'only allocate_all_vegpfts is supported')
     end if
@@ -382,7 +382,7 @@ contains
       pcturb = 0._r8
       write(LIS_logunit,*)'PCT_URBAN is not multi-density, pcturb set to 0'
     else
-      call read_clm45_param_to_local_g2d(ni, pcturb, 'PCT_URBAN', 'numurbl')
+      call read_clm45_param_to_local_g2d(ni, pcturb, 'PCT_URBAN', 'numurbl', zsindex=1)
     end if
     if ( nlevurb == 0 )then
        if ( any(pcturb > 0.0_r8) ) call endrun( trim(subname)//' ERROR: PCT_URBAN MUST be zero when nlevurb=0' )
@@ -963,7 +963,7 @@ contains
           do t = 1, LIS_rc%ntiles(n)
            g = LIS_domain(n)%tile(t)%index
            var(g) = localvar(LIS_domain(n)%tile(t)%col, LIS_domain(n)%tile(t)%row)
-           write(LIS_logunit, *) "g=", g, " var(g)= ", var(g)  
+           ! write(LIS_logunit, *) "g=", g, " var(g)= ", var(g)  
           end do
           call shr_sys_flush(LIS_logunit)
           deallocate(globalvar)
@@ -1021,7 +1021,7 @@ contains
           ios = nf90_inq_dimid(ftn,"north_south",nrId)
           call LIS_verify(ios,'Error in nf90_inq_dimid in read_clm45_params:north_south')
 
-          ios = nf90_inq_dimid(ftn, trim(zdimname),nrId)
+          ios = nf90_inq_dimid(ftn, trim(zdimname),nzId)
           call LIS_verify(ios,'Error in nf90_inq_dimid in read_clm45_params:'//trim(zdimname))
 
           ios = nf90_inquire_dimension(ftn,ncId, len=gnc)

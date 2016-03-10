@@ -41,7 +41,8 @@ module clm45_lsmMod
     use clm_varpar      , only : maxpatch, clm_varpar_init
     use clm_varcon      , only : clm_varcon_init
     use clm_varctl      , only : fsurdat, fatmlndfrc, flndtopo, fglcmask, noland, &
-                                 create_glacier_mec_landunit
+                                 create_glacier_mec_landunit, allocate_all_vegpfts, &
+				 create_crop_landunit, single_column
     use clm45_pftvarcon       , only : clm45_pftconrd
     use clm45_surfrdMod
     use clm_atmlnd   ,   only : atm2lnd_type 
@@ -275,6 +276,13 @@ contains
    allocate(clm45_struc(LIS_rc%nnest))
 
    call clm45_readcrd()
+
+   ! Setting control variables, used to be done in clmvarctl_init() 
+
+     create_glacier_mec_landunit = .false.
+     allocate_all_vegpfts = .true.  
+     create_crop_landunit = .false. 
+     single_column = .false.
 
     ! Read list of PFTs and their corresponding parameter values
     ! Independent of model resolution, Needs to stay before surfrd_get_data
