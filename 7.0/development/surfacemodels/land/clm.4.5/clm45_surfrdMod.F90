@@ -36,6 +36,7 @@ module clm45_surfrdMod
 
   use netcdf 
   use LIS_logMod
+  use LIS_coreMod
 !  use ncdio_pio
 !  use pio
 !
@@ -65,7 +66,8 @@ module clm45_surfrdMod
 !
 ! !PRIVATE DATA MEMBERS:
   ! default multiplication factor for epsilon for error checks
-  real(r8), private, parameter :: eps_fact = 2._r8
+!YDT  real(r8), private, parameter :: eps_fact = 2._r8
+  real(r8), private, parameter :: eps_fact = 10._r8
 !EOP
 !-----------------------------------------------------------------------
 
@@ -744,22 +746,30 @@ contains
     pctpft(begg:endg,0:numpft) = arrayl(begg:endg,0:numpft)
     deallocate(arrayl)
 
+    write(LIS_logunit, *) "===================  pctpft(nl, :) ==========================================="
     do nl = begg,endg
        if (pftm(nl) >= 0) then
+
+         ! print global ic, ir
+         !write(LIS_logunit,'(3I7, 17F7.3)') nl, LIS_domain(n)%grid(nl)%col + LIS_ews_ind(n, LIS_localPet+1) - 1, &
+         !                  LIS_domain(n)%grid(nl)%row + LIS_nss_ind(n, LIS_localPet+1) - 1,  pctpft(nl, :) 
 
           ! Error check: make sure PFTs sum to 100% cover for vegetated landunit 
           ! (convert pctpft from percent with respect to gridcel to percent with 
           ! respect to vegetated landunit)
 
           ! THESE CHECKS NEEDS TO BE THE SAME AS IN pftdynMod.F90!
-          if (pctspec(nl) < 100._r8 * (1._r8 - eps_fact*epsilon(1._r8))) then  ! pctspec not within eps_fact*epsilon of 100
+          !YDT if (pctspec(nl) < 100._r8 * (1._r8 - eps_fact*epsilon(1._r8))) then  ! pctspec not within eps_fact*epsilon of 100
+          if (pctspec(nl) < 100._r8 * (1._r8 - 0.001_r8) ) then  ! pctspec not within eps_fact*epsilon of 100
+             !YDT write(LIS_logunit, *) 'eps_fact=', (1._r8 - pctspec(nl)/100._r8)/epsilon(1._r8) 
              sumpct = 0._r8
              do m = 0,numpft
                 sumpct = sumpct + pctpft(nl,m) * 100._r8/(100._r8-pctspec(nl))
              end do
              if (abs(sumpct - 100._r8) > 0.1e-4_r8) then
                 write(LIS_logunit,*) trim(subname)//' ERROR: sum(pct) over numpft+1 is not = 100.'
-                write(LIS_logunit,*) sumpct, sumpct-100._r8, nl
+                write(LIS_logunit, '(3F12.5, 3I7)') sumpct, pctspec(nl), sumpct-100._r8, nl, LIS_domain(n)%grid(nl)%col, LIS_domain(n)%grid(nl)%row
+                write(LIS_logunit,'(17F7.3)') pctpft(nl, :) 
                 call endrun()
              end if
              if (sumpct < -0.000001_r8) then
@@ -782,6 +792,8 @@ contains
        end if
     end do
 
+!YDT
+#if 0 
     call mpi_allreduce(crop,crop_prog,1,MPI_LOGICAL,MPI_LOR,mpicom,ier)
     if (ier /= 0) then
        write(LIS_logunit,*) trim(subname)//' mpi_allreduce error = ',ier
@@ -801,6 +813,7 @@ contains
     if (masterproc .and. crop_prog .and. .not. irrigate) then
        write(LIS_logunit,*) trim(subname)//' crop=.T. and irrigate=.F., so merging irrigated pfts with rainfed' ! in the following do-loop
     end if
+#endif
 
 ! repeat do-loop for error checking and for rainfed crop case
 
@@ -1033,8 +1046,13 @@ contains
           ios = nf90_inquire_dimension(ftn,nzId, len=gnz)
           call LIS_verify(ios,'Error in nf90_inquire_dimension in read_clm45_params:nzId')
 
-          allocate(globalvar(gnc, gnr, zsindex:gnz))
-          allocate(localvar(LIS_rc%lnc(n),LIS_rc%lnr(n), zsindex:gnz))
+          if( zsindex .eq. 0 ) then 
+            allocate(globalvar(gnc, gnr, 0:gnz-1))
+            allocate(localvar(LIS_rc%lnc(n),LIS_rc%lnr(n), 0:gnz-1))
+          else 
+            allocate(globalvar(gnc, gnr, gnz))
+            allocate(localvar(LIS_rc%lnc(n),LIS_rc%lnr(n), gnz))
+          end if 
 
           ios = nf90_inq_varid(ftn, trim(varname), varid)
           call LIS_verify(ios, trim(varname)// ' field not found in the LIS param file')

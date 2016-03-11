@@ -315,7 +315,7 @@ contains
 ! !IROUTINE: decompInit_glcp
 !
 ! !INTERFACE:
-  subroutine decompInit_glcp(lns,lni,lnj,glcmask)
+  subroutine decompInit_glcp(nn, lns,lni,lnj,glcmask)
 !
 ! !DESCRIPTION:
 ! This subroutine initializes the land surface decomposition into a clump
@@ -327,10 +327,13 @@ contains
     use spmdMod
 !YDT    use spmdGathScatMod
     use subgridMod, only : subgrid_get_gcellinfo
+   use LIS_coreMod
+
 !
 ! !ARGUMENTS:
     implicit none
-    integer , intent(in) :: lns,lni,lnj ! land domain global size
+    integer , intent(in) :: nn   ! nest 
+    integer , intent(in) :: lns,lni,lnj ! land domain global size --YDT: now local size
     integer , pointer, optional   :: glcmask(:)  ! glc mask
 !
 ! !LOCAL VARIABLES:
@@ -354,6 +357,8 @@ contains
     integer :: ng                 ! number of gridcells in gsmap
     integer :: beg,end,num        ! temporaries
     integer :: val1, val2         ! temporaries
+!YDT
+#if 0 
     integer, pointer :: gindex(:) ! global index for gsmap init
     integer, pointer :: arrayg(:)
     integer, pointer :: gstart(:),gcount(:)
@@ -362,6 +367,16 @@ contains
     integer, pointer :: pstart(:),pcount(:)
     integer, pointer :: start(:),count(:)
     integer, pointer :: tarr1(:),tarr2(:)
+#endif
+    integer, allocatable :: gindex(:) ! global index for gsmap init
+    integer, allocatable :: arrayg(:)
+    integer, allocatable :: gstart(:),gcount(:)
+    integer, allocatable :: lstart(:),lcount(:)
+    integer, allocatable :: cstart(:),ccount(:)
+    integer, allocatable :: pstart(:),pcount(:)
+    integer, allocatable :: start(:),count(:)
+    integer, allocatable :: tarr1(:),tarr2(:)
+
     integer, allocatable :: allvecg(:,:)  ! temporary vector "global"
     integer, allocatable :: allvecl(:,:)  ! temporary vector "local"
 !YDT    type(mct_gsmap),pointer :: gsmap
@@ -385,7 +400,7 @@ contains
     call get_proc_bounds(begg, endg)
 
     allocate(gstart(begg:endg),lstart(begg:endg),cstart(begg:endg),pstart(begg:endg))
-    allocate(gcount(begg:endg),lcount(begg:endg),ccount(begg:endg),pcount(begg:endg))
+    allocate(gcount(begg:endg),lcount(begg:endg),ccount(begg:endg),pcount(begg:endg), stat=ier)
     allocate(allvecg(nclumps,4),allvecl(nclumps,4))   ! 3 = gcells,lunit,cols,pfts
 
     allvecg= 0
@@ -394,9 +409,12 @@ contains
     lcount = 0
     ccount = 0
     pcount = 0
+
+    write(LIS_logunit, *) "      ln    ilunits   icols   ipfts  begg   endg  nclumps"
     do anumg = begg,endg
        an  = ldecomp%gdc2glo(anumg)
-       cid = lcid(an)
+       !YDT cid = lcid(an)
+       cid = LIS_localPet + 1
        ln  = anumg
        if (present(glcmask)) then
           call subgrid_get_gcellinfo (ln, nlunits=ilunits, &
@@ -405,22 +423,26 @@ contains
           call subgrid_get_gcellinfo (ln, nlunits=ilunits, &
                ncols=icols, npfts=ipfts)
        endif
+       write(LIS_logunit, '(7I8)') ln, ilunits, icols, ipfts, begg, endg, nclumps
        allvecl(cid,1) = allvecl(cid,1) + 1
        allvecl(cid,2) = allvecl(cid,2) + ilunits
        allvecl(cid,3) = allvecl(cid,3) + icols
        allvecl(cid,4) = allvecl(cid,4) + ipfts
+       write(LIS_logunit, '(7I8)') ln, ilunits, icols, ipfts, begg, endg, nclumps
        gcount(ln) = 1
        lcount(ln) = ilunits
        ccount(ln) = icols
        pcount(ln) = ipfts
     enddo
-    call mpi_allreduce(allvecl,allvecg,size(allvecg),MPI_INTEGER,MPI_SUM,mpicom,ier)
+!YDT    call mpi_allreduce(allvecl,allvecg,size(allvecg),MPI_INTEGER,MPI_SUM,mpicom,ier)
 
     numg  = 0
     numl  = 0
     numc  = 0
     nump  = 0
-    do cid = 1,nclumps
+!YDT do not care about other nodes anymore. each node keeps account of its own 
+!YDT    do cid = 1,nclumps     
+       cid = LIS_localPet + 1
        icells  = allvecg(cid,1)
        ilunits = allvecg(cid,2)
        icols   = allvecg(cid,3)
@@ -432,12 +454,37 @@ contains
        numc = numc + icols
        nump = nump + ipfts
 
+       write(LIS_logunit, *) "  --------------- grand total ---------------------------"
+       write(LIS_logunit, *) "      ln    ilunits   icols   ipfts  begg   endg  nclumps"
+       write(LIS_logunit, '(7I8)') ln, ilunits, icols, ipfts, begg, endg, nclumps
        !--- give gridcell to cid ---
        !--- increment the beg and end indices ---
        clumps(cid)%nlunits = clumps(cid)%nlunits + ilunits
        clumps(cid)%ncols   = clumps(cid)%ncols   + icols
        clumps(cid)%npfts   = clumps(cid)%npfts   + ipfts
 
+!YDT
+       m = cid
+             clumps(m)%begl = 1 
+             clumps(m)%begc = 1
+             clumps(m)%begp = 1
+             clumps(m)%endl = ilunits
+             clumps(m)%endc = icols
+             clumps(m)%endp = ipfts
+
+          procinfo%nlunits =  ilunits
+          procinfo%ncols   =  icols
+          procinfo%npfts   =  ipfts
+
+          procinfo%begl = 1 
+          procinfo%begc = 1 
+          procinfo%begp = 1
+          procinfo%endl = ilunits
+          procinfo%endc = icols
+          procinfo%endp = ipfts
+
+!YDT: use the preceding block to replace the following block
+#if 0
        do m = 1,nclumps
           if ((clumps(m)%owner >  clumps(cid)%owner) .or. &
               (clumps(m)%owner == clumps(cid)%owner .and. m > cid)) then
@@ -473,9 +520,10 @@ contains
           procinfo%endc = procinfo%endc + icols
           procinfo%endp = procinfo%endp + ipfts
        endif
-    enddo
+#endif 
 
-    do n = 1,nclumps
+!YDT    do n = 1,nclumps
+       n = cid
        if (clumps(n)%ncells  /= allvecg(n,1) .or. &
            clumps(n)%nlunits /= allvecg(n,2) .or. &
            clumps(n)%ncols   /= allvecg(n,3) .or. &
@@ -486,7 +534,7 @@ contains
           write(LIS_logunit,*) 'decompInit_glcp(): allvecg error pfts   ',iam,n,clumps(n)%npfts  ,allvecg(n,4)
           call endrun()
        endif
-    enddo
+!YDT    enddo
 
     deallocate(allvecg,allvecl)
     deallocate(lcid)

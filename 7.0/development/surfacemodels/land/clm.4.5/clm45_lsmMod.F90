@@ -283,6 +283,8 @@ contains
      allocate_all_vegpfts = .true.  
      create_crop_landunit = .false. 
      single_column = .false.
+     ! used to be in decompMod. number of clumps per cpu
+     clump_pproc = 1
 
     ! Read list of PFTs and their corresponding parameter values
     ! Independent of model resolution, Needs to stay before surfrd_get_data
@@ -290,7 +292,7 @@ contains
 
    do n = 1, LIS_rc%nnest
 
-     call clm45_pftconrd(clm45_struc(n)%clm_vfile)  !  io rewritten 
+     call clm45_pftconrd(clm45_struc(n)%clm_vfile)  
      ! need to make nest-dependent (but they are  tile-independent variables and structures ) 
       call clm_varpar_init()   ! number of patches, vertical levels, etc
       call clm_varcon_init()   ! physical constants and thickness of vertical levels 
@@ -336,8 +338,13 @@ contains
 
     ! Determine decomposition of subgrid scale landunits, columns, pfts
 
-    ! YDT: need to make nest-dependent 
-!       call decompInit_glcp (ns, ni, nj)
+     write(LIS_logunit,*) '  ni    nj' 
+     write(LIS_logunit,*) '=============='
+     write(LIS_logunit,'(2I7)') ni, nj 
+     write(LIS_logunit,*) 
+
+     ! the equivalent of decompInit_lnd() is done inn clm45_domain_init() 
+     call decompInit_glcp (n, ni*nj, ni, nj)
 
       ! allocate all the data structures for each nest
       !call init_energy_balance_type(begp, endp, clm45_struc(n)%pebal)
@@ -381,10 +388,12 @@ contains
 ! \label{clm45_domain_init}
 !
 ! !INTERFACE:
-  subroutine clm45_domain_init(n, ni, nj)
+  subroutine clm45_domain_init(n, lni, lnj)
 ! !USES:
     use LIS_coreMod
     use LIS_precisionMod
+ 
+    use clm45_decompMod
 ! !DESCRIPTION:
 !
 ! Initializes clm45 domain for nest n 
@@ -395,20 +404,19 @@ contains
 !   index of the nest
 ! \end{description}
 !EOP
-    integer :: beg                          ! local beg index
-    integer :: end                          ! local end index
-    integer :: ni,nj,ns                     ! size of grid on file
+    integer :: n   ! nest 
+    integer :: beg, end 
+    integer :: lni,lnj,lns                     ! size of grid on file
     logical :: isgrid2d                     ! true => file is 2d lat/lon
 
-    integer :: k, n, nclumps 
+    integer :: k, ai, aj, an, ag
     integer :: ier, ip, cid 
-    integer, parameter :: clump_pproc = 1
 
     ! with clump_pproc = 1, nclumps = LIS_npes; cid ranges from 1 ... LIS_npes, 
     ! with corresponding owner ranging from 0 ... LIS_npes-1 (pid)
 
     isgrid2d = .true. 
-    ns = ni*nj
+    lns = lni*lnj
     nclumps = clump_pproc * LIS_npes
 
     allocate(procinfo%cid(clump_pproc), stat=ier)
@@ -471,7 +479,28 @@ contains
     End Do 
 
     call get_proc_bounds(beg, end)
-    call domain_init(ldomain, isgrid2d=isgrid2d, ni=ni, nj=nj, nbeg=beg, nend=end)
+    call domain_init(ldomain, isgrid2d=isgrid2d, ni=lni, nj=lnj, nbeg=beg, nend=end)
+
+    numg = end - beg + 1
+    allocate(ldecomp%gdc2glo(numg), ldecomp%glo2gdc(lns), stat=ier)
+    if (ier /= 0) then
+       write(LIS_logunit,*) 'decompInit_lnd(): allocation error1 for ldecomp, etc'
+       call endrun()
+    end if
+
+    ldecomp%gdc2glo(:) = 0
+    ldecomp%glo2gdc(:) = 0
+!  gdc2glo: 1-d land grid index to index in (lnc, lnr) space
+!  glo2gdc: opposite. 
+    ag = 0
+          do aj = 1,lnj
+            do ai = 1,lni
+                an = (aj-1)*lni + ai
+                ag = ag + 1
+                ldecomp%gdc2glo(ag) = an
+                ldecomp%glo2gdc(an) = ag
+            end do
+          end do
 
  end subroutine clm45_domain_init
 
