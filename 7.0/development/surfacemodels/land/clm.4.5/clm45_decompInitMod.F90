@@ -443,10 +443,10 @@ contains
 !YDT do not care about other nodes anymore. each node keeps account of its own 
 !YDT    do cid = 1,nclumps     
        cid = LIS_localPet + 1
-       icells  = allvecg(cid,1)
-       ilunits = allvecg(cid,2)
-       icols   = allvecg(cid,3)
-       ipfts   = allvecg(cid,4)
+       icells  = allvecl(cid,1)
+       ilunits = allvecl(cid,2)
+       icols   = allvecl(cid,3)
+       ipfts   = allvecl(cid,4)
 
        !--- overall total ---
        numg = numg + icells
@@ -455,13 +455,13 @@ contains
        nump = nump + ipfts
 
        write(LIS_logunit, *) "  --------------- grand total ---------------------------"
-       write(LIS_logunit, *) "      ln    ilunits   icols   ipfts  begg   endg  nclumps"
-       write(LIS_logunit, '(7I8)') ln, ilunits, icols, ipfts, begg, endg, nclumps
+       write(LIS_logunit, *) "      ln    icells  ilunits   icols   ipfts  begg   endg  nclumps"
+       write(LIS_logunit, '(8I8)') ln, icells, ilunits, icols, ipfts, begg, endg, nclumps
        !--- give gridcell to cid ---
        !--- increment the beg and end indices ---
-       clumps(cid)%nlunits = clumps(cid)%nlunits + ilunits
-       clumps(cid)%ncols   = clumps(cid)%ncols   + icols
-       clumps(cid)%npfts   = clumps(cid)%npfts   + ipfts
+       clumps(cid)%nlunits =  ilunits
+       clumps(cid)%ncols   =  icols
+       clumps(cid)%npfts   =  ipfts
 
 !YDT
        m = cid
@@ -520,7 +520,6 @@ contains
           procinfo%endc = procinfo%endc + icols
           procinfo%endp = procinfo%endp + ipfts
        endif
-#endif 
 
 !YDT    do n = 1,nclumps
        n = cid
@@ -536,8 +535,10 @@ contains
        endif
 !YDT    enddo
 
+#endif 
+
     deallocate(allvecg,allvecl)
-    deallocate(lcid)
+!YDT    deallocate(lcid)
 
     ! set gsMaps, perms for lun, col, pft
 
@@ -553,10 +554,10 @@ contains
     ! scatter the subgrid start indices back out to the gdc gridcells
     ! set the local gindex array for the subgrid from the subgrid start and count arrays
 
-    do k = 1,4
-
 !YDT
 #if 0 
+    do k = 1,4
+
        if (k == 1) then
           clmlevel = nameg
           beg = begg
@@ -609,7 +610,6 @@ contains
        endif
        call scatter_data_from_master(start,arrayg,grlnd)
 
-#endif
        allocate(gindex(beg:end))
 
        i = beg-1
@@ -634,7 +634,6 @@ contains
        gsize = num
 
 !YDT
-#if 0
       call mct_gsMap_init(gsMap, gindex, mpicom, comp_id, lsize, gsize)
 
        if (dbug > 1) then
@@ -670,10 +669,10 @@ contains
           !--- end test section      
        end if
 
-#endif 
        deallocate(gindex)
 
     enddo
+#endif 
 
     deallocate(gstart,lstart,cstart,pstart)
     deallocate(gcount,lcount,ccount,pcount)

@@ -49,12 +49,13 @@ module clm45_lsmMod
     use clm45_decompInitMod   , only : decompInit_lnd, decompInit_glcp
     use clm45_decompMod       
     use domainMod       , only : domain_check, ldomain, domain_init
-    use spmdMod         , only : masterproc
+    use spmdMod         , only : masterproc, mpicom
     use clm45_UrbanInputMod
 
   ! LIS modules
   use clm45_module
   use LIS_logMod
+  use LIS_mpiMod,  only : LIS_mpi_comm 
 
   implicit none
   
@@ -285,6 +286,8 @@ contains
      single_column = .false.
      ! used to be in decompMod. number of clumps per cpu
      clump_pproc = 1
+     ! let clm know LIS's mpi world
+     mpicom = LIS_mpi_comm
 
     ! Read list of PFTs and their corresponding parameter values
     ! Independent of model resolution, Needs to stay before surfrd_get_data
