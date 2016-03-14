@@ -131,7 +131,7 @@ module clm45_driver
   use CNVerticalProfileMod, only: decomp_vertprofiles
   use CNFireMod           , only : CNFireInterp
 #else
-  use STATICEcosysDynMod  , only : EcosystemDyn
+  use clm45_STATICEcosysDynMod  , only : EcosystemDyn
 #endif
   use ActiveLayerMod      , only : alt_calc
   use DUSTMod             , only : DustDryDep, DustEmission
