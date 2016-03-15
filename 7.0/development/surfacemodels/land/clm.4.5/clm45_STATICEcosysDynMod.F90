@@ -319,9 +319,9 @@ contains
     use clm45_pftvarcon   , only : noveg
     use clm45_decompMod   , only : get_proc_bounds
     use domainMod   , only : ldomain
-    use fileutils   , only : getfil
+!YDT    use fileutils   , only : getfil
     use clm_varctl  , only : fsurdat
-    use shr_scam_mod, only : shr_scam_getCloseLatLon
+!YDT    use shr_scam_mod, only : shr_scam_getCloseLatLon
 
     implicit none
 
@@ -381,6 +381,7 @@ contains
             closelat, closelon, closelatidx, closelonidx)
     endif
 
+
 #endif 
 
     do k=1,12   !! loop over months and read vegetated data
@@ -428,9 +429,9 @@ contains
     use clm45_decompMod   , only : get_proc_bounds
     use clm_varpar  , only : numpft
     use clm45_pftvarcon   , only : noveg
-    use fileutils   , only : getfil
+!YDT    use fileutils   , only : getfil
     use spmdMod     , only : masterproc, mpicom, MPI_REAL8, MPI_INTEGER
-    use shr_scam_mod, only : shr_scam_getCloseLatLon
+!YDT    use shr_scam_mod, only : shr_scam_getCloseLatLon
     use clm_time_manager, only : get_nstep
     use netcdf
 !

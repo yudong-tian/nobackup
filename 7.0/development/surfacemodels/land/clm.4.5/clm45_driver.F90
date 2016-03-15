@@ -100,7 +100,7 @@ module clm45_driver
 #endif
   use clm45_dynlandMod          , only : dynland_hwcontent
   use clm_varcon          , only : zlnd, isturb
-!YDT  use clm_time_manager    , only : get_step_size,get_curr_date,get_ref_date,get_nstep,is_perpetual
+  use clm_time_manager    , only : get_step_size,get_curr_date,get_ref_date,get_nstep,is_perpetual
 !YDT  use histFileMod         , only : hist_update_hbuf, hist_htapes_wrapup
 !YDT  use restFileMod         , only : restFile_write, restFile_filename
 
@@ -134,17 +134,17 @@ module clm45_driver
   use clm45_STATICEcosysDynMod  , only : EcosystemDyn
 #endif
   use ActiveLayerMod      , only : alt_calc
-  use DUSTMod             , only : DustDryDep, DustEmission
-  use clm45_VOCEmissionMod      , only : VOCEmission
-  use seq_drydep_mod      , only : n_drydep, drydep_method, DD_XLND
+!YDT  use DUSTMod             , only : DustDryDep, DustEmission
+!YDT  use clm45_VOCEmissionMod      , only : VOCEmission
+!YDT  use seq_drydep_mod      , only : n_drydep, drydep_method, DD_XLND
   use clm45_STATICEcosysDynMod  , only : interpMonthlyVeg
-  use clm45_DryDepVelocity      , only : depvel_compute
+!YDT  use clm45_DryDepVelocity      , only : depvel_compute
 #if (defined LCH4)
   use ch4Mod              , only : ch4
 #endif
   use abortutils          , only : endrun
   use UrbanMod            , only : UrbanAlbedo, UrbanRadiation, UrbanFluxes 
-  use SNICARMod           , only : SnowAge_grain
+!YDT  use SNICARMod           , only : SnowAge_grain
   use clm_atmlnd          , only : clm_map2gcell
 !YDT  use clm_glclnd          , only : create_clm_s2x
 !YDT  use perf_mod
@@ -274,7 +274,8 @@ subroutine clm45_drv(nest, doalb, nextsw_cday, declinp1, declin, rstwr, nlend, r
   ! weights obtained here are used in subroutine ecosystemdyn to obtain time
   ! interpolated values.
   ! ============================================================================
-  if (doalb .or. ( n_drydep > 0 .and. drydep_method == DD_XLND )) then
+!YDT  if (doalb .or. ( n_drydep > 0 .and. drydep_method == DD_XLND )) then
+  if (doalb) then
      !YDT call t_startf('interpMonthlyVeg')
      call interpMonthlyVeg()
      !YDT call t_stopf('interpMonthlyVeg')
@@ -365,7 +366,8 @@ subroutine clm45_drv(nest, doalb, nextsw_cday, declinp1, declin, rstwr, nlend, r
 #if (!defined CNDV)
    if (fpftdyn /= ' ') then
       !YDT call t_startf("pftdyn_interp")
-      call pftdyn_interp  ! change the pft weights
+      !YDT skip for now 3/15/16
+      !YDT call pftdyn_interp  ! change the pft weights
       
 !$OMP PARALLEL DO PRIVATE (nc,g,begg,endg,begl,endl,begc,endc,begp,endp)
       do nc = 1,nclumps
@@ -589,16 +591,17 @@ subroutine clm45_drv(nest, doalb, nextsw_cday, declinp1, declin, rstwr, nlend, r
 
      !YDT call t_startf('bgc')
 
+     !YDT: turned off 3/15/16 for now
      ! Dust mobilization (C. Zender's modified codes)
-     call DustEmission(begp, endp, begc, endc, begl, endl, &
-                       filter(nc)%num_nolakep, filter(nc)%nolakep)
+!YDT     call DustEmission(begp, endp, begc, endc, begl, endl, &
+!YDT                       filter(nc)%num_nolakep, filter(nc)%nolakep)
 
      ! Dust dry deposition (C. Zender's modified codes)
-     call DustDryDep(begp, endp)
+!YDT     call DustDryDep(begp, endp)
 
      ! VOC emission (A. Guenther's MEGAN (2006) model)
-     call VOCEmission(begp, endp, &
-                      filter(nc)%num_soilp, filter(nc)%soilp)
+!YDT     call VOCEmission(begp, endp, &
+!YDT                      filter(nc)%num_soilp, filter(nc)%soilp)
 
      !YDT call t_stopf('bgc')
 
@@ -665,9 +668,10 @@ subroutine clm45_drv(nest, doalb, nextsw_cday, declinp1, declin, rstwr, nlend, r
      ! Note the snow filters here do not include lakes; SnowAge_grain is called
      ! for lakes from SLakeHydrology.
 
-     call SnowAge_grain(begc, endc, &
-          filter(nc)%num_snowc, filter(nc)%snowc, &
-          filter(nc)%num_nosnowc, filter(nc)%nosnowc)
+    !YDT
+!YDT     call SnowAge_grain(begc, endc, &
+!YDT          filter(nc)%num_snowc, filter(nc)%snowc, &
+!YDT          filter(nc)%num_nosnowc, filter(nc)%nosnowc)
      !YDT call t_stopf('snow_init')
 
      ! ============================================================================
@@ -697,7 +701,8 @@ subroutine clm45_drv(nest, doalb, nextsw_cday, declinp1, declin, rstwr, nlend, r
 
      ! Dry Deposition of chemical tracers (Wesely (1998) parameterizaion)
      !YDT call t_startf('depvel')
-     call depvel_compute(begp,endp)
+     !YDT skip 3/15/16
+     !YDT call depvel_compute(begp,endp)
      !YDT call t_stopf('depvel')
 
      ! ============================================================================
@@ -770,7 +775,7 @@ subroutine clm45_drv(nest, doalb, nextsw_cday, declinp1, declin, rstwr, nlend, r
   ! ============================================================================
 
   !YDT call t_startf('clm_map2gcell')
-  call clm_map2gcell( )
+!YDT  call clm_map2gcell( )
   !YDT call t_stopf('clm_map2gcell')
 
   ! ============================================================================
@@ -789,6 +794,10 @@ subroutine clm45_drv(nest, doalb, nextsw_cday, declinp1, declin, rstwr, nlend, r
   ! ============================================================================
 
   nstep = get_nstep()
+
+!YDT
+#if 0 
+
   if (wrtdia) call mpi_barrier(mpicom,ier)
   !YDT call t_startf('wrtdiag')
   call write_diagnostic(wrtdia, nstep)
@@ -819,6 +828,8 @@ subroutine clm45_drv(nest, doalb, nextsw_cday, declinp1, declin, rstwr, nlend, r
   !YDT call t_startf('hbuf')
 !YDT  call hist_update_hbuf()
   !YDT call t_stopf('hbuf')
+
+#endif 
 
   ! ============================================================================
   ! Call dv (dynamic vegetation) at last time step of year
@@ -882,12 +893,14 @@ subroutine clm45_drv(nest, doalb, nextsw_cday, declinp1, declin, rstwr, nlend, r
   ! Write restart/initial files if appropriate
   ! ============================================================================
 
+#if 0 
   if (rstwr) then
      !YDT call t_startf('clm_drv_io_wrest')
      filer = restFile_filename(rdate=rdate)
      call restFile_write( filer, nlend, rdate=rdate )
      !YDT call t_stopf('clm_drv_io_wrest')
   end if
+#endif 
 
 #endif
   !YDT call t_stopf('clm_drv_io')

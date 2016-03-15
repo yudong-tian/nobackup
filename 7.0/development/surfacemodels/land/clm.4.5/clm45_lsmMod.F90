@@ -38,6 +38,7 @@ module clm45_lsmMod
   !CLM45 native modules
     use clmtypeInitMod  , only : initClmtype
     use clmtype
+    use clm_time_manager , only : get_nstep, get_step_size, set_timemgr_init, timemgr_init
     use clm_varpar      , only : maxpatch, clm_varpar_init
     use clm_varcon      , only : clm_varcon_init
     use clm_varctl      , only : fsurdat, fatmlndfrc, flndtopo, fglcmask, noland, &
@@ -209,6 +210,7 @@ contains
    implicit none
    integer :: n, i, t, g, gic, gir, gid, git
    integer                 :: yr, mo, da, hr, mn, ss
+   integer                 :: symd, eymd, stod, etod  ! clm date format: yyyymmdd as integer 
    integer                 :: status
    character*3   :: fnest
 
@@ -289,11 +291,24 @@ contains
      ! let clm know LIS's mpi world
      mpicom = LIS_mpi_comm
 
-    ! Read list of PFTs and their corresponding parameter values
-    ! Independent of model resolution, Needs to stay before surfrd_get_data
+    symd =  LIS_rc%syr*10000 + LIS_rc%smo * 100 + LIS_rc%sda
+    stod =  (LIS_rc%shr*60+LIS_rc%smn)*60+LIS_rc%sss      ! seconds of the day 
+    eymd =  LIS_rc%eyr*10000 + LIS_rc%emo * 100 + LIS_rc%eda
+    etod =  (LIS_rc%ehr*60+LIS_rc%emn)*60+LIS_rc%ess      ! seconds of the day 
+
+    ! Connect CLM time manager to LIS's 
+    call set_timemgr_init( calendar_in='NO_LEAP', start_ymd_in=symd, start_tod_in=stod, &
+                           ref_ymd_in=symd, ref_tod_in=stod, stop_ymd_in=eymd,         &
+                           stop_tod_in=etod,  perpetual_run_in=.false.,     &
+                           perpetual_ymd_in=-999, dtime_in=nint(LIS_rc%ts) )
+
+    call timemgr_init()
 
 
    do n = 1, LIS_rc%nnest
+
+     ! Read list of PFTs and their corresponding parameter values
+     ! Independent of model resolution, Needs to stay before surfrd_get_data
 
      call clm45_pftconrd(clm45_struc(n)%clm_vfile)  
      ! need to make nest-dependent (but they are  tile-independent variables and structures ) 

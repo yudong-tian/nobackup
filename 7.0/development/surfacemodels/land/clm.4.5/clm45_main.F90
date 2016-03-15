@@ -15,7 +15,9 @@
 ! !INTERFACE: 
 subroutine clm45_main (n)
 ! !USES: 
-  use LIS_precisionMod
+  use shr_kind_mod, only: r8 => shr_kind_r8
+
+!  use LIS_precisionMod
   use LIS_timeMgrMod, only : LIS_isAlarmRinging
   use clm45_lsmMod
   use clm_varpar, only : nlevsoi
@@ -30,7 +32,7 @@ subroutine clm45_main (n)
   use clm_csmMod    , only : csm_dosndrcv, csm_recv, csm_send, csm_flxave, &
                              dorecv, dosend, csmstop_now
 #endif
-  use clm2_shr_sys_mod   , only : clm2_shr_sys_flush
+
   use LIS_histDataMod
   use LIS_constantsMod,  only : LIS_CONST_RHOFW
 
@@ -48,7 +50,6 @@ subroutine clm45_main (n)
 ! ---------------------- local variables --------------------------
   integer  :: j,k,t,m           !loop/array indices
 !  real :: tvegb(144,76)
-  real(r8) :: caldayp1            !calendar day for nstep+1
   integer  :: dtime               !timestep size [seconds]
   integer  :: nstep               !timestep index
 !  real(r8) :: buf1d(numpatch)     !temporary buffer 
