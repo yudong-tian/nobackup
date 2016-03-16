@@ -52,6 +52,7 @@ module clm45_lsmMod
     use domainMod       , only : domain_check, ldomain, domain_init
     use spmdMod         , only : masterproc, mpicom
     use clm45_UrbanInputMod
+    use initGridCellsMod, only : initGridCells
 
   ! LIS modules
   use clm45_module
@@ -364,10 +365,30 @@ contains
      ! the equivalent of decompInit_lnd() is done inn clm45_domain_init() 
      call decompInit_glcp (n, ni*nj, ni, nj)
 
-      ! allocate all the data structures for each nest
-      !call init_energy_balance_type(begp, endp, clm45_struc(n)%pebal)
-      !call init_energy_balance_type(begc, endc, clm45_struc(n)%cebal)
-      ! ...
+     call initClmtype()
+
+     call init_atm2lnd_type(begg, endg, clm_a2l)
+     call init_lnd2atm_type(begg, endg, clm_l2a)  ! should not be needed 
+
+     call initGridCells()
+
+     deallocate (vegxy, wtxy, topoxy)
+
+!YDT ------------- end of initialize1() --------------------------------
+
+!YDT ------------- start of initialize2() --------------------------------
+
+      call EcosystemDynini()
+
+!YDT    call Dustini()
+!YDT    call VOCEmission_init( )
+
+      call UrbanInitTimeConst()
+      call iniTimeConst()
+
+      call initAccFlds()
+
+!YDT ------------- end of initialize2() --------------------------------
 
       call clm45_lsm_init(n)
 
