@@ -96,6 +96,8 @@ subroutine iniTimeConst
 !
 ! local pointers to implicit in arguments
 !
+  integer :: nest 
+
   real(r8), pointer :: topo_std(:)        ! gridcell elevation standard deviation
   real(r8), pointer :: topo_slope(:)      ! gridcell topographic slope
   real(r8), pointer :: micro_sigma(:)     ! microtopography pdf sigma (m)
@@ -431,9 +433,11 @@ subroutine iniTimeConst
 !YDT  if (single_column) then
 !YDT     call shr_scam_getCloseLatLon(locfn,scmlat,scmlon,closelat,closelon,closelatidx,closelonidx)
 !YDT  end if
-  call ncd_io(ncid=ncid, varname='mxsoil_color', flag='read', data=mxsoil_color, &
-              readvar=readvar)
-  if ( .not. readvar ) mxsoil_color = 8  
+!  call ncd_io(ncid=ncid, varname='mxsoil_color', flag='read', data=mxsoil_color, &
+!              readvar=readvar)
+  call read_clm45_param_to_local_g0d_int(nest, mxsoil_color, 'mxsoil_color')
+
+!YDT  if ( .not. readvar ) mxsoil_color = 8  
 
   ! Methane code parameters for finundated
 #ifdef LCH4
@@ -456,15 +460,17 @@ subroutine iniTimeConst
 ! def CH4
 
   ! Read lakedepth
-  call ncd_io(ncid=ncid, varname='LAKEDEPTH', flag='read', data=lakedepth_in, dim1name=grlnd, readvar=readvar)
-  if (.not. readvar) then
-     if (masterproc) write(iulog,*) 'WARNING:: LAKEDEPTH not found on surface data set. All lake columns will have lake depth', &
-                    ' set equal to default value.'
-     lakedepth_in(:) = spval
-  end if
+  !YDT call ncd_io(ncid=ncid, varname='LAKEDEPTH', flag='read', data=lakedepth_in, dim1name=grlnd, readvar=readvar)
+  ! if (.not. readvar) then
+  !    if (masterproc) write(iulog,*) 'WARNING:: LAKEDEPTH not found on surface data set. All lake columns will have lake depth', &
+  !                   ' set equal to default value.'
+  !    lakedepth_in(:) = spval
+  ! end if
+  call read_clm45_param_to_local_g1d(nest, lakedepth_in, 'LAKEDEPTH')
 
   ! Read lake eta
-  call ncd_io(ncid=ncid, varname='ETALAKE', flag='read', data=etal_in, dim1name=grlnd, readvar=readvar)
+ !YDT call ncd_io(ncid=ncid, varname='ETALAKE', flag='read', data=etal_in, dim1name=grlnd, readvar=readvar)
+  readvar = .false.   ! no such data in parameter file 
   if (.not. readvar) then
      if (masterproc) write(iulog,*) 'WARNING:: ETALAKE not found on surface data set. All lake columns will have eta', &
                     ' set equal to default value as a function of depth.'
@@ -472,7 +478,8 @@ subroutine iniTimeConst
   end if
 
   ! Read lake fetch
-  call ncd_io(ncid=ncid, varname='LAKEFETCH', flag='read', data=lakefetch_in, dim1name=grlnd, readvar=readvar)
+  !YDT call ncd_io(ncid=ncid, varname='LAKEFETCH', flag='read', data=lakefetch_in, dim1name=grlnd, readvar=readvar)
+  readvar = .false.   ! no such data in parameter file 
   if (.not. readvar) then
      if (masterproc) write(iulog,*) 'WARNING:: LAKEFETCH not found on surface data set. All lake columns will have fetch', &
                     ' set equal to default value as a function of depth.'
@@ -482,14 +489,17 @@ subroutine iniTimeConst
   ! Read in topographic index and slope
   allocate(tslope(begg:endg))
   allocate(std(begg:endg))
-  call ncd_io(ncid=ncid, varname='SLOPE', flag='read', data=tslope, dim1name=grlnd, readvar=readvar)
+  !YDT call ncd_io(ncid=ncid, varname='SLOPE', flag='read', data=tslope, dim1name=grlnd, readvar=readvar)
+  call read_clm45_param_to_local_g1d(nest, tslope, 'SLOPE', readvar=readvar)
   if (.not. readvar) call endrun( trim(subname)//' ERROR: TOPOGRAPHIC SLOPE NOT on surfdata file') 
-  call ncd_io(ncid=ncid, varname='STD_ELEV', flag='read', data=std, dim1name=grlnd, readvar=readvar)
+  !YDT call ncd_io(ncid=ncid, varname='STD_ELEV', flag='read', data=std, dim1name=grlnd, readvar=readvar)
+  call read_clm45_param_to_local_g1d(nest, std, 'STD_ELEV', readvar=readvar)
   if (.not. readvar) call endrun( trim(subname)//' ERROR: TOPOGRAPHIC STDdev (STD_ELEV) NOT on surfdata file') 
 
   ! Read fmax
 
-  call ncd_io(ncid=ncid, varname='FMAX', flag='read', data=gti, dim1name=grlnd, readvar=readvar)
+  !YDT call ncd_io(ncid=ncid, varname='FMAX', flag='read', data=gti, dim1name=grlnd, readvar=readvar)
+  call read_clm45_param_to_local_g1d(nest, gti, 'FMAX', readvar=readvar)
   if (.not. readvar) call endrun( trim(subname)//' ERROR: FMAX NOT on surfdata file') 
 #if (defined VICHYDRO)
   call ncd_io(ncid=ncid, varname='binfl', flag='read', data=b2d, dim1name=grlnd, readvar=readvar)
@@ -504,57 +514,69 @@ subroutine iniTimeConst
 
   ! Read in soil color, sand and clay fraction
 
-  call ncd_io(ncid=ncid, varname='SOIL_COLOR', flag='read', data=soic2d, dim1name=grlnd, readvar=readvar)
+  !YDT call ncd_io(ncid=ncid, varname='SOIL_COLOR', flag='read', data=soic2d, dim1name=grlnd, readvar=readvar)
+  call read_clm45_param_to_local_g1d_int(nest, soic2d, 'SOIL_COLOR', readvar=readvar)
   if (.not. readvar) call endrun( trim(subname)//' ERROR: SOIL_COLOR NOT on surfdata file' ) 
 
   ! Read in GDP data added by F. Li and S. Levis
 
-  call ncd_io(ncid=ncid, varname='gdp', flag='read', data=gdp, dim1name=grlnd, readvar=readvar)
+  !YDT call ncd_io(ncid=ncid, varname='gdp', flag='read', data=gdp, dim1name=grlnd, readvar=readvar)
+  call read_clm45_param_to_local_g1d(nest, gdp, 'gdp', readvar=readvar)
   if (.not. readvar) call endrun( trim(subname)//' ERROR: gdp NOT on surfdata file' ) 
 
   ! Read in peatf data added by F. Li and S. Levis
 
-  call ncd_io(ncid=ncid, varname='peatf', flag='read', data=peatf, dim1name=grlnd, readvar=readvar)
+  !call ncd_io(ncid=ncid, varname='peatf', flag='read', data=peatf, dim1name=grlnd, readvar=readvar)
+  call read_clm45_param_to_local_g1d(nest, peatf, 'peatf', readvar=readvar)
   if (.not. readvar) call endrun( trim(subname)//' ERROR: peatf NOT on surfdata file' ) 
 
   ! Read in ABM data added by F. Li and S. Levis
 
-  call ncd_io(ncid=ncid, varname='abm', flag='read', data=abm, dim1name=grlnd, readvar=readvar)
+  !YDT call ncd_io(ncid=ncid, varname='abm', flag='read', data=abm, dim1name=grlnd, readvar=readvar)
+  call read_clm45_param_to_local_g1d_int(nest, abm, 'abm', readvar=readvar)
   if (.not. readvar) call endrun( trim(subname)//' ERROR: abm NOT on surfdata file' ) 
 
   ! Read in emission factors
 
-  call ncd_io(ncid=ncid, varname='EF1_BTR', flag='read', data=temp_ef, dim1name=grlnd, readvar=readvar)
+!YDT  call ncd_io(ncid=ncid, varname='EF1_BTR', flag='read', data=temp_ef, dim1name=grlnd, readvar=readvar)
+  call read_clm45_param_to_local_g1d(nest, ptemp_ef, 'EF1_BTR', readvar=readvar)
   if (.not. readvar) call endrun('iniTimeConst: errror reading EF1_BTR')
   efisop2d(1,:)=temp_ef(:)
 
-  call ncd_io(ncid=ncid, varname='EF1_FET', flag='read', data=temp_ef, dim1name=grlnd, readvar=readvar)
+!YDT  call ncd_io(ncid=ncid, varname='EF1_FET', flag='read', data=temp_ef, dim1name=grlnd, readvar=readvar)
+  call read_clm45_param_to_local_g1d(nest, temp_ef, 'EF1_FET', readvar=readvar)
   if (.not. readvar) call endrun('iniTimeConst: errror reading EF1_FET')
   efisop2d(2,:)=temp_ef(:)
 
-  call ncd_io(ncid=ncid, varname='EF1_FDT', flag='read', data=temp_ef, dim1name=grlnd, readvar=readvar)
+!YDT  call ncd_io(ncid=ncid, varname='EF1_FDT', flag='read', data=temp_ef, dim1name=grlnd, readvar=readvar)
+  call read_clm45_param_to_local_g1d(nest, temp_ef, 'EF1_FDT', readvar=readvar)
   if (.not. readvar) call endrun('iniTimeConst: errror reading EF1_FDT')
   efisop2d(3,:)=temp_ef(:)
 
-  call ncd_io(ncid=ncid, varname='EF1_SHR', flag='read', data=temp_ef, dim1name=grlnd, readvar=readvar)
+!YDT  call ncd_io(ncid=ncid, varname='EF1_SHR', flag='read', data=temp_ef, dim1name=grlnd, readvar=readvar)
+  call read_clm45_param_to_local_g1d(nest, temp_ef, 'EF1_SHR', readvar=readvar)
   if (.not. readvar) call endrun('iniTimeConst: errror reading EF1_SHR')
   efisop2d(4,:)=temp_ef(:)
 
-  call ncd_io(ncid=ncid, varname='EF1_GRS', flag='read', data=temp_ef, dim1name=grlnd, readvar=readvar)
+!YDT  call ncd_io(ncid=ncid, varname='EF1_GRS', flag='read', data=temp_ef, dim1name=grlnd, readvar=readvar)
+  call read_clm45_param_to_local_g1d(nest, temp_ef, 'EF1_GRS', readvar=readvar)
   if (.not. readvar) call endrun('iniTimeConst: errror reading EF1_GRS')
   efisop2d(5,:)=temp_ef(:)
 
-  call ncd_io(ncid=ncid, varname='EF1_CRP', flag='read', data=temp_ef, dim1name=grlnd, readvar=readvar)
+!YDT  call ncd_io(ncid=ncid, varname='EF1_CRP', flag='read', data=temp_ef, dim1name=grlnd, readvar=readvar)
+  call read_clm45_param_to_local_g1d(nest, temp_ef, 'EF1_CRP', readvar=readvar)
   if (.not. readvar) call endrun('iniTimeConst: errror reading EF1_CRP')
   efisop2d(6,:)=temp_ef(:)
 
-  call ncd_io(ncid=ncid, varname='PCT_SAND', flag='read', data=sand3d, dim1name=grlnd, readvar=readvar)
+!YDT  call ncd_io(ncid=ncid, varname='PCT_SAND', flag='read', data=sand3d, dim1name=grlnd, readvar=readvar)
+  call read_clm45_param_to_local_g2d(nest, sand3d, 'PCT_SAND', 'nlevsoi', readvar=readvar)
   if (.not. readvar) call endrun( trim(subname)//' ERROR: PCT_SAND NOT on surfdata file' ) 
 
-  call ncd_io(ncid=ncid, varname='PCT_CLAY', flag='read', data=clay3d, dim1name=grlnd, readvar=readvar)
+!YDT  call ncd_io(ncid=ncid, varname='PCT_CLAY', flag='read', data=clay3d, dim1name=grlnd, readvar=readvar)
+  call read_clm45_param_to_local_g2d(nest, clay3d, 'PCT_CLAY', 'nlevsoi', readvar=readvar)
   if (.not. readvar) call endrun( trim(subname)//' ERROR: PCT_CLAY NOT on surfdata file' ) 
 
-  call ncd_pio_closefile(ncid)
+!YDT  call ncd_pio_closefile(ncid)
 
   if (masterproc) then
      write(iulog,*) 'Successfully read fmax, soil color, sand and clay boundary data'

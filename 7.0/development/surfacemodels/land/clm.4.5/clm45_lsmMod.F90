@@ -365,8 +365,6 @@ contains
      ! the equivalent of decompInit_lnd() is done inn clm45_domain_init() 
      call decompInit_glcp (n, ni*nj, ni, nj)
 
-     call initClmtype()
-
      call init_atm2lnd_type(begg, endg, clm_a2l)
      call init_lnd2atm_type(begg, endg, clm_l2a)  ! should not be needed 
 
@@ -387,6 +385,74 @@ contains
       call iniTimeConst()
 
       call initAccFlds()
+
+     call initClmtype()
+     call initAccClmtype()
+     call allocFilters()
+
+    nclumps = get_proc_clumps()
+    do nc = 1, nclumps
+       call reweightWrapup(nc)
+    end do
+
+    call UrbanInitAero()
+    ! Initialize urban radiation model - this uses urbinp data structure
+
+    call UrbanClumpInit()
+
+    ! Finalize urban model initialization
+    call UrbanInput(mode='finalize')
+
+    ! End initialization
+
+    if (masterproc) then
+       write(iulog,*) 'Successfully initialized the land model'
+       if (nsrest == nsrStartup) then
+          write(iulog,*) 'begin initial run at: '
+       else
+          write(iulog,*) 'begin continuation run at:'
+       end if
+       call get_curr_date(yr, mon, day, ncsec)
+       write(iulog,*) '   nstep= ',get_nstep(), ' year= ',yr,' month= ',mon,&
+            ' day= ',day,' seconds= ',ncsec
+       write(iulog,*)
+       write(iulog,'(72a1)') ("*",i=1,60)
+       write(iulog,*)
+    endif
+
+    if (get_nstep() == 0 .or. nsrest == nsrStartup) then
+       ! Initialize albedos (correct pft filters are needed)
+
+       if (finidat == ' ' .or. do_initsurfalb) then
+          call t_startf('init_orb')
+          calday = get_curr_calday()
+          call t_startf('init_orbd1')
+          call shr_orb_decl( calday, eccen, mvelpp, lambm0, obliqr, declin, eccf )
+          call t_stopf('init_orbd1')
+
+          dtime = get_step_size()
+          caldaym1 = get_curr_calday(offset=-int(dtime))
+          call t_startf('init_orbd2')
+          call shr_orb_decl( caldaym1, eccen, mvelpp, lambm0, obliqr, declinm1, eccf )
+          call t_stopf('init_orbd2')
+
+          call t_startf('init_orbSA')
+          call initSurfAlb( calday, declin, declinm1 )
+          call t_stopf('init_orbSA')
+          call t_stopf('init_orb')
+       else if ( n_drydep > 0 .and. drydep_method == DD_XLND )then
+          ! Call interpMonthlyVeg for dry-deposition so that mlaidiff will be calculated
+          ! This needs to be done even if CN or CNDV is on!
+          call interpMonthlyVeg()
+       end if
+
+       ! Determine gridcell averaged properties to send to atm
+
+       call t_startf('init_map2gc')
+       call clm_map2gcell(init=.true.)
+       call t_stopf('init_map2gc')
+    end if 
+
 
 !YDT ------------- end of initialize2() --------------------------------
 
