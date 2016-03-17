@@ -38,21 +38,32 @@ module clm45_lsmMod
   !CLM45 native modules
     use clmtypeInitMod  , only : initClmtype
     use clmtype
-    use clm_time_manager , only : get_nstep, get_step_size, set_timemgr_init, timemgr_init
+    use clm_time_manager , only : get_nstep, get_step_size, set_timemgr_init, timemgr_init, &
+                                  get_curr_calday, get_curr_date
     use clm_varpar      , only : maxpatch, clm_varpar_init
     use clm_varcon      , only : clm_varcon_init
     use clm_varctl      , only : fsurdat, fatmlndfrc, flndtopo, fglcmask, noland, &
                                  create_glacier_mec_landunit, allocate_all_vegpfts, &
-				 create_crop_landunit, single_column
-    use clm45_pftvarcon       , only : clm45_pftconrd
-    use clm45_surfrdMod
-    use clm_atmlnd   ,   only : atm2lnd_type 
-    use clm45_decompInitMod   , only : decompInit_lnd, decompInit_glcp
+				 create_crop_landunit, single_column, nsrStartup, finidat
+    use pftvarcon       , only : clm45_pftconrd
+    use surfrdMod
+    use clm_atmlnd   ,   only : atm2lnd_type, clm_a2l, clm_l2a,  clm_map2gcell, init_atm2lnd_type, &
+                                init_lnd2atm_type
+    use decompInitMod   , only : decompInit_lnd, decompInit_glcp
     use clm45_decompMod       
     use domainMod       , only : domain_check, ldomain, domain_init
     use spmdMod         , only : masterproc, mpicom
-    use clm45_UrbanInputMod
+    use UrbanInputMod
     use initGridCellsMod, only : initGridCells
+    use perf_mod
+    use initSurfAlbMod
+    use shr_orb_mod
+    use STATICEcosysDynMod
+    use UrbanInitMod 
+    use UrbanMod 
+!YDT    use accFldsMod
+    use filterMod 
+    use reweightMod 
 
   ! LIS modules
   use clm45_module
@@ -184,7 +195,6 @@ type(gridcell_type) :: grc    !gridcell data structure
 
 !forcing, 
   type(atm2lnd_type) :: clm_a2l      ! a2l fields on clm grid
-
   end type clm45_type_dec
 
   type(clm45_type_dec), allocatable :: clm45_struc(:)   ! nnest copies 
@@ -209,9 +219,12 @@ contains
 !
 !EOP
    implicit none
-   integer :: n, i, t, g, gic, gir, gid, git
+   integer :: n, i, t, g, gic, gir, gid, git, nc, nsrest
    integer                 :: yr, mo, da, hr, mn, ss
+   integer                 :: mon, day, ncsec, dtime
    integer                 :: symd, eymd, stod, etod  ! clm date format: yyyymmdd as integer 
+   real(r8)	           ::  eccen, mvelpp, lambm0, obliqr, declin, eccf, ceclinm1, calday
+   real(r8)	           ::  declinm1, caldaym1 
    integer                 :: status
    character*3   :: fnest
 
@@ -384,10 +397,10 @@ contains
       call UrbanInitTimeConst()
       call iniTimeConst()
 
-      call initAccFlds()
+!YDT      call initAccFlds()
 
      call initClmtype()
-     call initAccClmtype()
+!YDT     call initAccClmtype()
      call allocFilters()
 
     nclumps = get_proc_clumps()
@@ -401,23 +414,23 @@ contains
     call UrbanClumpInit()
 
     ! Finalize urban model initialization
-    call UrbanInput(mode='finalize')
+    call clm45_UrbanInput(n, mode='finalize')
 
     ! End initialization
 
     if (masterproc) then
-       write(iulog,*) 'Successfully initialized the land model'
+       write(LIS_logunit,*) 'Successfully initialized the land model'
        if (nsrest == nsrStartup) then
-          write(iulog,*) 'begin initial run at: '
+          write(LIS_logunit,*) 'begin initial run at: '
        else
-          write(iulog,*) 'begin continuation run at:'
+          write(LIS_logunit,*) 'begin continuation run at:'
        end if
        call get_curr_date(yr, mon, day, ncsec)
-       write(iulog,*) '   nstep= ',get_nstep(), ' year= ',yr,' month= ',mon,&
+       write(LIS_logunit,*) '   nstep= ',get_nstep(), ' year= ',yr,' month= ',mon,&
             ' day= ',day,' seconds= ',ncsec
-       write(iulog,*)
-       write(iulog,'(72a1)') ("*",i=1,60)
-       write(iulog,*)
+       write(LIS_logunit,*)
+       write(LIS_logunit,'(72a1)') ("*",i=1,60)
+       write(LIS_logunit,*)
     endif
 
     if (get_nstep() == 0 .or. nsrest == nsrStartup) then
@@ -440,10 +453,11 @@ contains
           call initSurfAlb( calday, declin, declinm1 )
           call t_stopf('init_orbSA')
           call t_stopf('init_orb')
-       else if ( n_drydep > 0 .and. drydep_method == DD_XLND )then
+       !YDT
+       !YDT else if ( n_drydep > 0 .and. drydep_method == DD_XLND )then
           ! Call interpMonthlyVeg for dry-deposition so that mlaidiff will be calculated
           ! This needs to be done even if CN or CNDV is on!
-          call interpMonthlyVeg()
+       !YDT    call interpMonthlyVeg()
        end if
 
        ! Determine gridcell averaged properties to send to atm

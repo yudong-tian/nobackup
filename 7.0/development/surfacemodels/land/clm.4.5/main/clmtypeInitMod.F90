@@ -108,7 +108,7 @@ contains
 !
 ! !USES:
     use abortutils, only : endrun
-    use decompMod , only : get_proc_bounds, get_proc_global
+    use clm45_decompMod , only : get_proc_bounds, get_proc_global
 !
 ! !ARGUMENTS:
     implicit none

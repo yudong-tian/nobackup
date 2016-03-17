@@ -1,4 +1,4 @@
-module clm45_dynlandMod
+module dynlandMod
 
 !---------------------------------------------------------------------------
 !BOP
@@ -286,4 +286,4 @@ contains
 
 !===============================================================================
 
-end module clm45_dynlandMod
+end module dynlandMod

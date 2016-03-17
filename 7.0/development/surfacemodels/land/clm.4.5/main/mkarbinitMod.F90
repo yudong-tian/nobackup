@@ -55,7 +55,7 @@ contains
     use clm_varcon   , only : istice_mec, h2osno_max
     use clm_varctl   , only : iulog
     use spmdMod      , only : masterproc
-    use decompMod    , only : get_proc_bounds
+    use clm45_decompMod    , only : get_proc_bounds
     use SNICARMod    , only : snw_rds_min
 
 !

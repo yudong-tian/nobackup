@@ -20,6 +20,7 @@ subroutine clm45_main (n)
 !  use LIS_precisionMod
   use LIS_timeMgrMod, only : LIS_isAlarmRinging
   use clm45_lsmMod
+  use clm45_driver 
   use clm_varpar, only : nlevsoi
   use clm_varcon   
   use LIS_coreMod, only : LIS_rc

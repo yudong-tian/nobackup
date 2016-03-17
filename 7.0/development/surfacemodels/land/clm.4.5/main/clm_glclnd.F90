@@ -19,7 +19,7 @@ module clm_glclnd
 ! 'ice' refers to sea ice, not land ice.
 !
 ! !USES:
-  use decompMod   , only : get_proc_bounds
+  use clm45_decompMod   , only : get_proc_bounds
   use shr_kind_mod, only : r8 => shr_kind_r8
   use shr_infnan_mod, only : nan => shr_infnan_nan, assignment(=)
   use spmdMod     , only : masterproc

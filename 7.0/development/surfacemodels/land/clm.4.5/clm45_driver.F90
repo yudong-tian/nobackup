@@ -88,8 +88,8 @@ module clm45_driver
   use clm_varctl          , only : wrtdia, fpftdyn, iulog, create_glacier_mec_landunit
   use spmdMod             , only : masterproc,mpicom, iam
   use clm45_decompMod           , only : get_proc_clumps, get_clump_bounds, get_proc_bounds
-  use clm45_filterMod           , only : filter
-  use clm45_reweightMod         , only : reweightWrapup
+  use filterMod           , only : filter
+  use reweightMod         , only : reweightWrapup
 #if (defined CNDV)
   use CNDVMod             , only : dv, histCNDV
   use pftdynMod           , only : pftwt_interp
@@ -98,7 +98,7 @@ module clm45_driver
 #ifdef CN
   use pftdynMod           , only : pftdyn_cnbal
 #endif
-  use clm45_dynlandMod          , only : dynland_hwcontent
+  use dynlandMod          , only : dynland_hwcontent
   use clm_varcon          , only : zlnd, isturb
   use clm_time_manager    , only : get_step_size,get_curr_date,get_ref_date,get_nstep,is_perpetual
 !YDT  use histFileMod         , only : hist_update_hbuf, hist_htapes_wrapup
@@ -131,13 +131,13 @@ module clm45_driver
   use CNVerticalProfileMod, only: decomp_vertprofiles
   use CNFireMod           , only : CNFireInterp
 #else
-  use clm45_STATICEcosysDynMod  , only : EcosystemDyn
+  use STATICEcosysDynMod  , only : EcosystemDyn
 #endif
   use ActiveLayerMod      , only : alt_calc
 !YDT  use DUSTMod             , only : DustDryDep, DustEmission
 !YDT  use clm45_VOCEmissionMod      , only : VOCEmission
 !YDT  use seq_drydep_mod      , only : n_drydep, drydep_method, DD_XLND
-  use clm45_STATICEcosysDynMod  , only : interpMonthlyVeg
+  use STATICEcosysDynMod  , only : interpMonthlyVeg
 !YDT  use clm45_DryDepVelocity      , only : depvel_compute
 #if (defined LCH4)
   use ch4Mod              , only : ch4

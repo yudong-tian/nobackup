@@ -2357,7 +2357,7 @@ contains
     use clm_varcon   , only : spval, icol_roof, icol_sunwall, icol_shadewall, &
                               icol_road_perv, icol_road_imperv, udens_base
     use clm45_decompMod    , only : get_proc_clumps, ldecomp
-    use clm45_filterMod    , only : filter
+    use filterMod    , only : filter
     use UrbanInputMod, only : urbinp
 !
 ! !ARGUMENTS:
@@ -2510,7 +2510,7 @@ contains
                                     grav, pondmx_urban, rpi, rgas, &
                                     ht_wasteheat_factor, ac_wasteheat_factor, &
                                     wasteheat_limit
-    use clm45_filterMod          , only : filter
+    use filterMod          , only : filter
     use FrictionVelocityMod, only : FrictionVelocity, MoninObukIni
     use QSatMod            , only : QSat
     use clm_varpar         , only : maxpatch_urb, nlevurb, nlevgrnd

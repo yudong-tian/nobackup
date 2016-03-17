@@ -99,7 +99,7 @@ contains
     use clm_varpar   , only : nlevsno, nlevlak, nlevgrnd, nlevsoi
     use clm_varcon   , only : bdsno, denice, denh2o, spval, tfrz, tkwat
     use spmdMod      , only : masterproc
-    use decompMod    , only : get_proc_bounds
+    use clm45_decompMod    , only : get_proc_bounds
     use clm_varctl   , only : iulog
     use SNICARMod    , only : snw_rds_min
 !
@@ -467,7 +467,7 @@ subroutine initTimeConst
 ! !USES:
   use shr_kind_mod, only : r8 => shr_kind_r8
   use clmtype
-  use decompMod   , only : get_proc_bounds, get_proc_global
+  use clm45_decompMod   , only : get_proc_bounds, get_proc_global
   use clm_atmlnd  , only : clm_a2l
   use clm_varpar  , only : nlevsoi, nlevlak, nlevgrnd
   use clm_varcon  , only : istdlak, &

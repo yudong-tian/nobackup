@@ -1,9 +1,9 @@
-module clm45_filterMod
+module filterMod
 
 !-----------------------------------------------------------------------
 !BOP
 !
-! !MODULE: clm45_filterMod
+! !MODULE: filterMod
 !
 ! !DESCRIPTION:
 ! Module of filters used for processing columns and pfts of particular
@@ -384,4 +384,4 @@ contains
 
   end subroutine setFilters
 
-end module clm45_filterMod
+end module filterMod
