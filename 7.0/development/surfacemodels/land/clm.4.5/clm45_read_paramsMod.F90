@@ -123,6 +123,7 @@ contains
           ios = nf90_inquire_dimension(ftn,nrId, len=gnr)
           call LIS_verify(ios,'Error in nf90_inquire_dimension in read_clm45_params:nrId')
 
+          write(LIS_logunit, *) "gnc=", gnc, " gnr=", gnr 
           allocate(globalvar(gnc,gnr))
 
           ios = nf90_inq_varid(ftn, trim(varname), varid)
@@ -140,14 +141,14 @@ contains
             LIS_nss_halo_ind(n,LIS_localPet+1): &
             LIS_nse_halo_ind(n,LIS_localPet+1))
 
+          deallocate(globalvar)
+
           do t = 1, LIS_rc%ntiles(n)
            g = LIS_domain(n)%tile(t)%index
            var(g) = localvar(LIS_domain(n)%tile(t)%col, LIS_domain(n)%tile(t)%row)
            ! write(LIS_logunit, *) "g=", g, " var(g)= ", var(g)  
           end do
-          call shr_sys_flush(LIS_logunit)
-          deallocate(globalvar)
-          readvar = .true. 
+          if (present(readvar)) readvar = .true. 
 #endif
 
   end subroutine read_clm45_param_to_local_g1d
@@ -175,6 +176,7 @@ contains
    character(len=*), intent(in) :: varname, zdimname
    integer, optional :: zsindex 
    logical, optional :: readvar 
+   integer :: zindex 
    integer :: t, g, gid, lastg, g0, i, j, ic0, ir0, gid0, lastgrid  ! how many tiles up to last grid
 
     integer                    :: ios
@@ -190,7 +192,11 @@ contains
     real,      allocatable     :: globalvar(:, :,:)
     real,      allocatable     :: localvar(:, :, :)
 
-   if ( .not. present(zsindex) ) zsindex = 1
+   if ( present(zsindex) ) then 
+           zindex= zsindex
+   else 
+           zindex= 1 
+   end if 
 #if (defined USE_NETCDF3 || defined USE_NETCDF4)
 
           ios = nf90_open(path=LIS_rc%paramfile(n),&
@@ -215,7 +221,7 @@ contains
           ios = nf90_inquire_dimension(ftn,nzId, len=gnz)
           call LIS_verify(ios,'Error in nf90_inquire_dimension in read_clm45_params:nzId')
 
-          if( zsindex .eq. 0 ) then 
+          if( zindex .eq. 0 ) then 
             allocate(globalvar(gnc, gnr, 0:gnz-1))
             allocate(localvar(LIS_rc%lnc(n),LIS_rc%lnr(n), 0:gnz-1))
           else 
@@ -244,7 +250,7 @@ contains
           end do
           deallocate(globalvar)
           deallocate(localvar)
-          readvar = .true.
+          if (present(readvar)) readvar = .true. 
 #endif
 
   end subroutine read_clm45_param_to_local_g2d
@@ -326,7 +332,7 @@ contains
            var(g) = nint(localvar(LIS_domain(n)%tile(t)%col, LIS_domain(n)%tile(t)%row))
           end do
           deallocate(globalvar)
-          readvar = .true. 
+          if (present(readvar)) readvar = .true. 
 #endif
 
   end subroutine read_clm45_param_to_local_g1d_int

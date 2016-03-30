@@ -4,7 +4,7 @@
 ! !ROUTINE: iniTimeConst
 !
 ! !INTERFACE:
-subroutine iniTimeConst
+subroutine iniTimeConst(nest) 
 !
 ! !DESCRIPTION:
 ! Initialize time invariant clm variables
@@ -97,7 +97,7 @@ subroutine iniTimeConst
 !
 ! local pointers to implicit in arguments
 !
-  integer :: nest 
+  integer :: nest  
 
   real(r8), pointer :: topo_std(:)        ! gridcell elevation standard deviation
   real(r8), pointer :: topo_slope(:)      ! gridcell topographic slope

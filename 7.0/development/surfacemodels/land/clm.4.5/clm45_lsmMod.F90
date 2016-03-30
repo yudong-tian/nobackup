@@ -378,6 +378,8 @@ contains
      ! the equivalent of decompInit_lnd() is done inn clm45_domain_init() 
      call decompInit_glcp (n, ni*nj, ni, nj)
 
+     call initClmtype()
+
      call init_atm2lnd_type(begg, endg, clm_a2l)
      call init_lnd2atm_type(begg, endg, clm_l2a)  ! should not be needed 
 
@@ -395,11 +397,10 @@ contains
 !YDT    call VOCEmission_init( )
 
       call UrbanInitTimeConst()
-      call iniTimeConst()
+      call iniTimeConst(n)             ! nest passed
 
 !YDT      call initAccFlds()
 
-     call initClmtype()
 !YDT     call initAccClmtype()
      call allocFilters()
 
