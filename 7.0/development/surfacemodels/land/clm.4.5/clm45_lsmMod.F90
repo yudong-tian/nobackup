@@ -219,7 +219,7 @@ contains
 !
 !EOP
    implicit none
-   integer :: n, i, t, g, gic, gir, gid, git, nc, nsrest
+   integer :: n, i, t, g, gic, gir, gid, git, nc, nsrest, lnclumps
    integer                 :: yr, mo, da, hr, mn, ss
    integer                 :: mon, day, ncsec, dtime
    integer                 :: symd, eymd, stod, etod  ! clm date format: yyyymmdd as integer 
@@ -229,7 +229,7 @@ contains
    character*3   :: fnest
 
    integer :: begg, endg, begl, endl, begc, endc, begp, endp
-   integer :: ni, nj, ns 
+   integer :: ni, nj, ns, ic, ip, il, ig
    integer :: ier 
 
    masterproc = LIS_masterproc 
@@ -383,7 +383,13 @@ contains
      call init_atm2lnd_type(begg, endg, clm_a2l)
      call init_lnd2atm_type(begg, endg, clm_l2a)  ! should not be needed 
 
-     call initGridCells()
+     call initGridcells()
+
+! YDT check weights 
+!     call get_proc_bounds (begg, endg, begl, endl, begc, endc, begp, endp)
+!     Do ic = begc, endc 
+!       write(LIS_logunit, '(A, I7, A, F7.4)' ) 'col=', ic, ' col%wtgcell(ic)=', col%wtgcell(ic) 
+!     End Do 
 
      deallocate (vegxy, wtxy, topoxy)
 
@@ -404,8 +410,10 @@ contains
 !YDT     call initAccClmtype()
      call allocFilters()
 
-    nclumps = get_proc_clumps()
-    do nc = 1, nclumps
+!YDT reweight will call setFilters() 
+    lnclumps = get_proc_clumps()
+    write(LIS_logunit,*) 'lnclumps =', lnclumps 
+    do nc = 1, lnclumps
        call reweightWrapup(nc)
     end do
 
@@ -451,7 +459,7 @@ contains
           call t_stopf('init_orbd2')
 
           call t_startf('init_orbSA')
-          call initSurfAlb( calday, declin, declinm1 )
+          call initSurfalb( calday, declin, declinm1 )
           call t_stopf('init_orbSA')
           call t_stopf('init_orb')
        !YDT
@@ -575,10 +583,11 @@ contains
     Do ip = 0, LIS_npes-1 
        cid = ip+1
        clumps(cid)%owner   = ip 
-       procinfo%cid(clump_pproc)  = cid 
     End Do 
 
     cid = LIS_localPet + 1
+    procinfo%cid(clump_pproc)  = cid 
+
     ! cpu-local 
     if ( clumps(cid)%owner == LIS_localPet ) then 
        procinfo%ncells  = LIS_ngrids(n, LIS_localPet)

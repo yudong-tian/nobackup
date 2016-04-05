@@ -60,6 +60,8 @@ contains
 !
 ! !USES:
     use clm_varctl, only : nsegspc
+ use LIS_coreMod
+
 !
 ! !ARGUMENTS:
     implicit none
@@ -151,6 +153,9 @@ contains
     clumps(:)%endp    = 0
 
     !--- assign clumps to proc round robin ---
+
+!Cut the chase
+#if 0
     cid = 0
     do n = 1,nclumps
        pid = mod(n-1,npes)
@@ -165,9 +170,15 @@ contains
              write(LIS_logunit,*) 'decompInit_lnd(): round robin pid error ',n,pid,npes
              call endrun()
           endif
-          procinfo%cid(cid) = n
+          !YDT procinfo%cid(cid) = n
+          procinfo%cid(cid) = 1    ! since it is local now, always 1 
        endif
     enddo
+#endif 
+    do n = 1,nclumps
+       clumps(n)%owner = LIS_localPet + 1
+    end do 
+    procinfo%cid(:) = 1    ! since it is local now, always 1 
 
     !--- count total land gridcells
     numg = 0
@@ -705,26 +716,8 @@ contains
     ! barrier to control pes overwriting each other on stdout
 
     call shr_sys_flush(LIS_logunit)
-    call mpi_barrier(mpicom,ier)
-    npmin = 0
-    npmax = npes-1
-    npint = 1
-    if (dbug == 0) then
-       npmax = 0
-    elseif (dbug == 1) then
-       npmax = min(npes-1,4)
-    elseif (dbug == 2) then
-       npint = npes/8
-    endif
-    do np = npmin,npmax,npint
-       pid = np
-       if (dbug == 1) then
-          if (np == 2) pid=npes/2-1
-          if (np == 3) pid=npes-2
-          if (np == 4) pid=npes-1
-       endif
-       pid = max(pid,0)
-       pid = min(pid,npes-1)
+
+    pid = iam 
 
        if (iam == pid) then
           write(LIS_logunit,*)
@@ -765,11 +758,6 @@ contains
 
           clmin = 1
           clmax = procinfo%nclumps
-          if (dbug == 1) then
-            clmax = 1
-          elseif (dbug == 0) then
-            clmax = -1
-          endif
           do n = clmin,clmax
              cid = procinfo%cid(n)
              write(LIS_logunit,*)'proc= ',pid,' clump no = ',n, &
@@ -794,9 +782,6 @@ contains
                   ' total pfts per clump     = ',clumps(cid)%npfts
           end do
        end if
-       call shr_sys_flush(LIS_logunit)
-       call mpi_barrier(mpicom,ier)
-    end do
     call shr_sys_flush(LIS_logunit)
 
   end subroutine decompInit_glcp

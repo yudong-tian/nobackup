@@ -93,7 +93,8 @@ module reweightMod
 ! !USES:
   use shr_kind_mod, only: r8 => shr_kind_r8
   use abortutils, only : endrun
-  use clm_varctl, only : iulog
+  use LIS_logMod,      only : LIS_logunit
+
 !
 ! PUBLIC TYPES:
   implicit none
@@ -207,6 +208,9 @@ contains
 
     call get_clump_bounds(nc, begg, endg, begl, endl, begc, endc, begp, endp)
 
+    write(LIS_logunit, *) ' -----------clump bounds -------------------------------------' 
+    write(LIS_logunit, *) ' begg,   endg,  begl,   endl,   begc,   endc,   begp,   endp ' 
+    write(LIS_logunit, '(8I6)') begg, endg, begl, endl, begc, endc, begp, endp 
 
     error_found = .false.
 
@@ -217,8 +221,9 @@ contains
     do c = begc,endc
        l = col%landunit(c)
        col%active(c) = is_active_c(c)
+       ! write(LIS_logunit, *) 'c=', c, ' col%active(c)=', col%active(c), ' col%wtgcell(c)=', col%wtgcell(c)
        if (col%active(c) .and. .not. lun%active(l)) then
-          write(iulog,*) trim(subname),' ERROR: active column found on inactive landunit', &
+          write(LIS_logunit,*) trim(subname),' ERROR: active column found on inactive landunit ', &
                          'at c = ', c, ', l = ', l
           error_found = .true. 
        end if
@@ -228,8 +233,8 @@ contains
        c = pft%column(p)
        pft%active(p) = is_active_p(p)
        if (pft%active(p) .and. .not. col%active(c)) then
-          write(iulog,*) trim(subname),' ERROR: active pft found on inactive column', &
-                         'at p = ', p, ', c = ', c
+          write(LIS_logunit,'(A, A, A, I6, A, I6, A, F7.4)') trim(subname),' ERROR: active pft found on inactive column ', &
+                         'at p = ', p, ', c = ', c, ' col%wtgcell(c)=', col%wtgcell(c)
           error_found = .true. 
        end if
     end do
@@ -444,7 +449,7 @@ contains
 
     do c = begc,endc
        if (.not. weightsOkay(sumwtcol(c), active_only, col%active(c))) then
-          write(iulog,*) trim(subname),' ERROR: at c = ',c,'total PFT weight is ',sumwtcol(c), &
+          write(LIS_logunit,*) trim(subname),' ERROR: at c = ',c,'total PFT weight is ',sumwtcol(c), &
                          'active_only = ', active_only
           error_found = .true.
        end if
@@ -452,7 +457,7 @@ contains
 
     do l = begl,endl
        if (.not. weightsOkay(sumwtlunit(l), active_only, lun%active(l))) then
-          write(iulog,*) trim(subname),' ERROR: at l = ',l,'total PFT weight is ',sumwtlunit(l), &
+          write(LIS_logunit,*) trim(subname),' ERROR: at l = ',l,'total PFT weight is ',sumwtlunit(l), &
                          'active_only = ', active_only
           error_found = .true.
        end if
@@ -460,7 +465,7 @@ contains
 
     do g = begg,endg
        if (.not. weightsOkay(sumwtgcell(g), active_only, i_am_active=.true.)) then
-          write(iulog,*) trim(subname),' ERROR: at g = ',g,'total PFT weight is ',sumwtgcell(g), &
+          write(LIS_logunit,*) trim(subname),' ERROR: at g = ',g,'total PFT weight is ',sumwtgcell(g), &
                          'active_only = ', active_only
           error_found = .true.
        end if
@@ -482,7 +487,7 @@ contains
 
     do l = begl,endl
        if (.not. weightsOkay(sumwtlunit(l), active_only, lun%active(l))) then
-          write(iulog,*) trim(subname),' ERROR: at l = ',l,'total col weight is ',sumwtlunit(l), &
+          write(LIS_logunit,*) trim(subname),' ERROR: at l = ',l,'total col weight is ',sumwtlunit(l), &
                          'active_only = ', active_only
           error_found = .true.
        end if
@@ -490,7 +495,7 @@ contains
     
     do g = begg,endg
        if (.not. weightsOkay(sumwtgcell(g), active_only, i_am_active=.true.)) then
-          write(iulog,*) trim(subname),' ERROR: at g = ',g,'total col weight is ',sumwtgcell(g), &
+          write(LIS_logunit,*) trim(subname),' ERROR: at g = ',g,'total col weight is ',sumwtgcell(g), &
                          'active_only = ', active_only
           error_found = .true.
        end if
@@ -508,7 +513,7 @@ contains
 
     do g = begg,endg
        if (.not. weightsOkay(sumwtgcell(g), active_only, i_am_active=.true.)) then
-          write(iulog,*) trim(subname),' ERROR: at g = ',g,'total lunit weight is ',sumwtgcell(g), &
+          write(LIS_logunit,*) trim(subname),' ERROR: at g = ',g,'total lunit weight is ',sumwtgcell(g), &
                          'active_only = ', active_only
           error_found = .true.
        end if
