@@ -75,6 +75,7 @@ contains
     use clm_time_manager, only : get_nstep
     use abortutils      , only : endrun
     use clm_varctl      , only : iulog, subgridflag
+    use LIS_logMod 
 
 !
 ! !ARGUMENTS:
@@ -537,6 +538,10 @@ contains
 
     ! CLIMATE FEEDBACK CALCULATIONS, ALL AEROSOLS:
     flg_slr = 1; ! direct-beam
+!YDT debugging
+    write(LIS_logunit, *) '==============h2osno_liq,  h2osno_ice ======== '
+    write(LIS_logunit, *) h2osno_liq,  h2osno_ice
+  
     call SNICAR_RT(flg_snw_ice, lbc, ubc, num_nourbanc, filter_nourbanc,    &
                    coszen_col, flg_slr, h2osno_liq, h2osno_ice, snw_rds_in, &
                    mss_cnc_aer_in_fdb, albsfc, albsnd, flx_absd_snw)

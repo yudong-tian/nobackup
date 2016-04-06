@@ -40,11 +40,12 @@ module clm45_lsmMod
     use clmtype
     use clm_time_manager , only : get_nstep, get_step_size, set_timemgr_init, timemgr_init, &
                                   get_curr_calday, get_curr_date
-    use clm_varpar      , only : maxpatch, clm_varpar_init
+    use clm_varpar      , only : maxpatch, clm_varpar_init, more_vertlayers
     use clm_varcon      , only : clm_varcon_init
     use clm_varctl      , only : fsurdat, fatmlndfrc, flndtopo, fglcmask, noland, &
                                  create_glacier_mec_landunit, allocate_all_vegpfts, &
-				 create_crop_landunit, single_column, nsrStartup, finidat
+				 create_crop_landunit, single_column, nsrStartup, finidat, &
+                                 co2_type, co2_ppmv, fpftcon, fsnowaging, fsnowoptics, nsegspc 
     use pftvarcon       , only : clm45_pftconrd
     use surfrdMod
     use clm_atmlnd   ,   only : atm2lnd_type, clm_a2l, clm_l2a,  clm_map2gcell, init_atm2lnd_type, &
@@ -215,6 +216,10 @@ contains
         LIS_update_timestep, LIS_registerAlarm
    use LIS_logMod,       only : LIS_verify, LIS_logunit
    use clm_varsur
+   use mkarbinitMod
+   use initSLakeMod
+   use accFldsMod
+   use SurfaceAlbedoMod, only: albice
 ! !DESCRIPTION:        
 !
 !EOP
@@ -226,6 +231,7 @@ contains
    real(r8)	           ::  eccen, mvelpp, lambm0, obliqr, declin, eccf, ceclinm1, calday
    real(r8)	           ::  declinm1, caldaym1 
    integer                 :: status
+   logical :: arbinit
    character*3   :: fnest
 
    integer :: begg, endg, begl, endl, begc, endc, begp, endp
@@ -295,15 +301,36 @@ contains
    call clm45_readcrd()
 
    ! Setting control variables, used to be done in clmvarctl_init() 
+   ! could be moved to lis config file 
 
      create_glacier_mec_landunit = .false.
      allocate_all_vegpfts = .true.  
-     create_crop_landunit = .false. 
      single_column = .false.
      ! used to be in decompMod. number of clumps per cpu
      clump_pproc = 1
+
+   ! these were in lnd_in run-time config
+    albice(1) = 0.60
+    albice(2) = 0.40
+    co2_ppmv = 284.7
+    co2_type = 'constant'
+    create_crop_landunit = .false.
+    !YDT dtime = 1800
+    fatmlndfrc = '/discover/nobackup/projects/nca/ytian/CESM_INPUT_DATA/share/domains/domain.lnd.fv0.9x1.25_gx1v6.090309.nc'
+    finidat = '/discover/nobackup/projects/nca/ytian/CESM_INPUT_DATA/lnd/clm2/initdata_map/clmi.I1850CRUCLM45SP.0521-01-01.0.9x1.25_g1v6_simyr1850_c130506.nc'
+    fpftcon = '/discover/nobackup/projects/nca/ytian/CESM_INPUT_DATA/lnd/clm2/pftdata/pft-physiology.c130503.nc'
+    fsnowaging = '/discover/nobackup/projects/nca/ytian/CESM_INPUT_DATA/lnd/clm2/snicardata/snicar_drdt_bst_fit_60_c070416.nc'
+    fsnowoptics = '/discover/nobackup/projects/nca/ytian/CESM_INPUT_DATA/lnd/clm2/snicardata/snicar_optics_5bnd_c090915.nc'
+    fsurdat = '/discover/nobackup/projects/nca/ytian/CESM_INPUT_DATA/lnd/clm2/surfdata_map/surfdata_0.9x1.25_simyr1850_c130415.nc'
+    maxpatch_glcmec = 0
+    more_vertlayers = .false.
+    nsegspc = 20
+    urban_hac = 'ON'
+    urban_traffic = .false.
+
      ! let clm know LIS's mpi world
      mpicom = LIS_mpi_comm
+     call spmd_init(mpicom, 1) 
 
     symd =  LIS_rc%syr*10000 + LIS_rc%smo * 100 + LIS_rc%sda
     stod =  (LIS_rc%shr*60+LIS_rc%smn)*60+LIS_rc%sss      ! seconds of the day 
@@ -405,9 +432,18 @@ contains
       call UrbanInitTimeConst()
       call iniTimeConst(n)             ! nest passed
 
-!YDT      call initAccFlds()
+!YDT: cold start initialization. To be replaced from restart file reading 
+       call mkarbinit()
 
-!YDT     call initAccClmtype()
+       call UrbanInitTimeVar( )
+
+       arbinit = .true.
+       call initSLake(arbinit)
+
+     call initAccFlds()
+
+     call initAccClmtype()
+
      call allocFilters()
 
 !YDT reweight will call setFilters() 

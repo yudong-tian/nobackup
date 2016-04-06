@@ -292,7 +292,7 @@ subroutine clm45_drv(nest, doalb, nextsw_cday, declinp1, declin, rstwr, nlend, r
   nc = 1
   call get_clump_bounds(nc, begg, endg, begl, endl, begc, endc, begp, endp)
    write(iulog,*) 'clm45_drv():  iam   nclumps  begg  endg   begl  endl  begc  endc  begp  endp' 
-   write(iulog,*) iam,  nclumps, begg, endg, begl, endl, begc, endc, begp, endp
+   write(iulog,'(10I6)') iam,  nclumps, begg, endg, begl, endl, begc, endc, begp, endp
 
 #if (defined _OPENMP)
   call endrun( 'ERROR: OpenMP does NOT work on the CLM4.5 science branch. Set the number of threads for LND to 1 and rerun.' )

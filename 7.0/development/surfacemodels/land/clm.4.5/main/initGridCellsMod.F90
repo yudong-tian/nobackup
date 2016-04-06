@@ -109,7 +109,7 @@ contains
 
     ! Get total global number of grid cells, landunits, columns and pfts 
     
-    call get_proc_global(numg,numl,numc,nump)
+!YDT not used    call get_proc_global(numg,numl,numc,nump)
     call get_proc_bounds(begg,endg,begl,endl,begc,endc,begp,endp)
 
     ! For each land gridcell on global grid determine landunit, column and pft properties

@@ -252,9 +252,10 @@ contains
 ! Determine if 2 new months of data are to be read.
 !
 ! !USES:
-    use clm_varctl      , only : fsurdat
+!YDT    use clm_varctl      , only : fsurdat
     use clm_time_manager, only : get_curr_date, get_step_size, &
                                  get_perp_date, is_perpetual, get_nstep
+    use LIS_logMod
 !
 ! !ARGUMENTS:
     implicit none
@@ -300,10 +301,11 @@ contains
           write(iulog,*) 'Attempting to read monthly vegetation data .....'
           write(iulog,*) 'nstep = ',get_nstep(),' month = ',kmo,' day = ',kda
        end if
-       call t_startf('readMonthlyVeg')
-       call readMonthlyVegetation (fsurdat, months)
+       !YDT call readMonthlyVegetation (fsurdat, months)
+!YDT  
+      write(LIS_logunit, *) 'dtime=', dtime, ' months=', months
+       call readMonthlyVegetation (months)
        InterpMonths1 = months(1)
-       call t_stopf('readMonthlyVeg')
     end if
 
   end subroutine interpMonthlyVeg
@@ -320,7 +322,7 @@ contains
     use clm45_decompMod   , only : get_proc_bounds
     use domainMod   , only : ldomain
 !YDT    use fileutils   , only : getfil
-    use clm_varctl  , only : fsurdat
+!YDT    use clm_varctl  , only : fsurdat
 !YDT    use shr_scam_mod, only : shr_scam_getCloseLatLon
 
     implicit none
@@ -419,7 +421,8 @@ contains
 ! !IROUTINE: readMonthlyVegetation
 !
 ! !INTERFACE:
-  subroutine readMonthlyVegetation (fveg, months)
+!YDT  subroutine readMonthlyVegetation (fveg, months)
+  subroutine readMonthlyVegetation (months)
 !
 ! !DESCRIPTION:
 ! Read monthly vegetation data for two consec. months.
@@ -438,7 +441,7 @@ contains
 ! !ARGUMENTS:
     implicit none
 
-    character(len=*), intent(in) :: fveg  ! file with monthly vegetation data
+!YDT    character(len=*), intent(in) :: fveg  ! file with monthly vegetation data
     integer, intent(in) :: months(2)      ! months to be interpolated (1 to 12)
 !
 ! !REVISION HISTORY:

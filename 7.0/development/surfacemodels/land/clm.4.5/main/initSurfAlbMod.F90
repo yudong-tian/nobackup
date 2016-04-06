@@ -71,6 +71,7 @@ contains
 #endif
     use UrbanMod            , only : UrbanAlbedo
     use abortutils          , only : endrun
+    use LIS_logMod 
 !
 ! !ARGUMENTS:
     implicit none
@@ -208,6 +209,11 @@ contains
        ! Determine clump bounds
 
        call get_clump_bounds(nc, begg, endg, begl, endl, begc, endc, begp, endp)
+
+    write(LIS_logunit, *) ' -----------in initSurfAlbMod.F90 clump bounds -------------'
+    write(LIS_logunit, *) ' nc, begg,   endg,  begl,   endl,   begc,   endc,   begp,   endp '
+    write(LIS_logunit, '(9I6)') nc,  begg, endg, begl, endl, begc, endc, begp, endp
+
 
        ! Determine variables needed by SurfaceAlbedo for lake points
 
