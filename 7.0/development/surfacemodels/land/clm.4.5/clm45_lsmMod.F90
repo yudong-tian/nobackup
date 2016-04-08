@@ -481,6 +481,8 @@ contains
     if (get_nstep() == 0 .or. nsrest == nsrStartup) then
        ! Initialize albedos (correct pft filters are needed)
 
+!YDT 
+       do_initsurfalb = .true.
        if (finidat == ' ' .or. do_initsurfalb) then
           call t_startf('init_orb')
           calday = get_curr_calday()
@@ -506,6 +508,9 @@ contains
        end if
 
        ! Determine gridcell averaged properties to send to atm
+       call print_glcp('p')  !debugging print
+
+       write(LIS_logunit, *) pps%albd
 
        call t_startf('init_map2gc')
        call clm_map2gcell(init=.true.)

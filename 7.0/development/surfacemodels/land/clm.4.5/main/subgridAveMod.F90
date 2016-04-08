@@ -803,6 +803,7 @@ contains
 !
 ! !USES:
     use clm_varpar, only : max_pft_per_gcell
+    use LIS_logMod
 !
 ! !ARGUMENTS:
     implicit none
@@ -911,9 +912,14 @@ contains
     garr(:,:) = spval
     do j = 1,num2d
        sumwt(:) = 0._r8
+!YDT
+   write(LIS_logunit, *) 'j,   num2d,   p,    c,    wtgcell(p)    pactive(p)' 
        do p = lbp,ubp
           if (pactive(p) .and. wtgcell(p) /= 0._r8) then
              c = pcolumn(p)
+!YDT
+   write(LIS_logunit, '(4I6, F10.5, L3)') j,   num2d,  p,    c,    wtgcell(p), pactive(p) 
+
              l = plandunit(p)
              if (parr(p,j) /= spval .and. scale_c2l(c) /= spval .and. scale_l2g(l) /= spval) then
                 g = pgridcell(p)

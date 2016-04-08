@@ -53,7 +53,7 @@ subroutine iniTimeConst(nest)
   use organicFileMod  , only : organicrd    !re-written 
   use spmdMod         , only : mpicom, MPI_INTEGER, masterproc
   use clm_varctl      , only : fsnowoptics, fsnowaging
-!YDT  use SNICARMod       , only : SnowAge_init, SnowOptics_init
+  use SNICARMod       , only : SnowAge_init, SnowOptics_init
 #if (defined LCH4)
   use ch4varcon       , only : usephfact, fin_use_fsat
 #endif
@@ -1436,9 +1436,9 @@ subroutine iniTimeConst(nest)
 #endif
 
    ! Initialize SNICAR optical and aging parameters:
-!YDT   call SnowOptics_init( )
+   call SnowOptics_init( )
 
-!YDT   call SnowAge_init( )
+   call SnowAge_init( )
 
    if (masterproc) write(iulog,*) 'Successfully initialized time invariant variables'
 

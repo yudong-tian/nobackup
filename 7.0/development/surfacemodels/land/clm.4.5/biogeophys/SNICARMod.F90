@@ -12,9 +12,9 @@ module SNICARMod
 ! !USES:
   use shr_kind_mod  , only : r8 => shr_kind_r8
   use shr_sys_mod   , only : shr_sys_flush
-  use clm_varctl    , only : iulog
   use shr_const_mod , only : SHR_CONST_RHOICE
   use abortutils    , only : endrun
+  use LIS_logMod
 
   implicit none
   save
@@ -22,8 +22,15 @@ module SNICARMod
 ! !PUBLIC MEMBER FUNCTIONS:
   public :: SNICAR_RT        ! Snow albedo and vertically-resolved solar absorption
   public :: SnowAge_grain    ! Snow effective grain size evolution
-!YDT  public :: SnowAge_init     ! Initial read in of snow-aging file
-!YDT  public :: SnowOptics_init  ! Initial read in of snow-optics file
+  public :: SnowAge_init     ! Initial read in of snow-aging file
+  public :: SnowOptics_init  ! Initial read in of snow-optics file
+
+  interface clm45_snow_io
+     module procedure clm45_snow_io_1d 
+     module procedure clm45_snow_io_2d 
+     module procedure clm45_snow_io_3d 
+  end interface
+
 !
 ! !PUBLIC DATA MEMBERS:
 
@@ -482,12 +489,12 @@ contains
           ! Error check for snow grain size:
           do i=snl_top,snl_btm,1
              if ((snw_rds_lcl(i) < snw_rds_min_tbl) .or. (snw_rds_lcl(i) > snw_rds_max_tbl)) then
-                write (iulog,*) "SNICAR ERROR: snow grain radius of ", snw_rds_lcl(i), " out of bounds."
-                write (iulog,*) "NSTEP= ", nstep
-                write (iulog,*) "flg_snw_ice= ", flg_snw_ice
-                write (iulog,*) "column: ", c_idx, " level: ", i, " snl(c)= ", snl_lcl
-                write (iulog,*) "lat= ", lat_coord, " lon= ", lon_coord
-                write (iulog,*) "h2osno(c)= ", h2osno_lcl
+                write (LIS_logunit,*) "SNICAR ERROR: snow grain radius of ", snw_rds_lcl(i), " out of bounds."
+                write (LIS_logunit,*) "NSTEP= ", nstep
+                write (LIS_logunit,*) "flg_snw_ice= ", flg_snw_ice
+                write (LIS_logunit,*) "column: ", c_idx, " level: ", i, " snl(c)= ", snl_lcl
+                write (LIS_logunit,*) "lat= ", lat_coord, " lon= ", lon_coord
+                write (LIS_logunit,*) "h2osno(c)= ", h2osno_lcl
                 call endrun()
              endif
           enddo
@@ -948,20 +955,20 @@ contains
                    err_idx = err_idx + 1
                 elseif((trip == 1).and.(flg_dover == 4).and.(err_idx >= 20)) then
                    flg_dover = 0
-                   write(iulog,*) "SNICAR ERROR: FOUND A WORMHOLE. STUCK IN INFINITE LOOP! Called from: ", flg_snw_ice
-                   write(iulog,*) "SNICAR STATS: snw_rds(0)= ", snw_rds(c_idx,0)
-                   write(iulog,*) "SNICAR STATS: L_snw(0)= ", L_snw(0)
-                   write(iulog,*) "SNICAR STATS: h2osno= ", h2osno_lcl, " snl= ", snl_lcl
-                   write(iulog,*) "SNICAR STATS: soot1(0)= ", mss_cnc_aer_lcl(0,1)
-                   write(iulog,*) "SNICAR STATS: soot2(0)= ", mss_cnc_aer_lcl(0,2)
-                   write(iulog,*) "SNICAR STATS: dust1(0)= ", mss_cnc_aer_lcl(0,3)
-                   write(iulog,*) "SNICAR STATS: dust2(0)= ", mss_cnc_aer_lcl(0,4)
-                   write(iulog,*) "SNICAR STATS: dust3(0)= ", mss_cnc_aer_lcl(0,5)
-                   write(iulog,*) "SNICAR STATS: dust4(0)= ", mss_cnc_aer_lcl(0,6)
+                   write(LIS_logunit,*) "SNICAR ERROR: FOUND A WORMHOLE. STUCK IN INFINITE LOOP! Called from: ", flg_snw_ice
+                   write(LIS_logunit,*) "SNICAR STATS: snw_rds(0)= ", snw_rds(c_idx,0)
+                   write(LIS_logunit,*) "SNICAR STATS: L_snw(0)= ", L_snw(0)
+                   write(LIS_logunit,*) "SNICAR STATS: h2osno= ", h2osno_lcl, " snl= ", snl_lcl
+                   write(LIS_logunit,*) "SNICAR STATS: soot1(0)= ", mss_cnc_aer_lcl(0,1)
+                   write(LIS_logunit,*) "SNICAR STATS: soot2(0)= ", mss_cnc_aer_lcl(0,2)
+                   write(LIS_logunit,*) "SNICAR STATS: dust1(0)= ", mss_cnc_aer_lcl(0,3)
+                   write(LIS_logunit,*) "SNICAR STATS: dust2(0)= ", mss_cnc_aer_lcl(0,4)
+                   write(LIS_logunit,*) "SNICAR STATS: dust3(0)= ", mss_cnc_aer_lcl(0,5)
+                   write(LIS_logunit,*) "SNICAR STATS: dust4(0)= ", mss_cnc_aer_lcl(0,6)
                    l_idx     = clandunit(c_idx)
-                   write(iulog,*) "column index: ", c_idx
-                   write(iulog,*) "landunit type", ltype(l_idx)
-                   write(iulog,*) "frac_sno: ", frac_sno(c_idx)
+                   write(LIS_logunit,*) "column index: ", c_idx
+                   write(LIS_logunit,*) "landunit type", ltype(l_idx)
+                   write(LIS_logunit,*) "frac_sno: ", frac_sno(c_idx)
                   
                    call endrun()
                 else
@@ -974,7 +981,7 @@ contains
              ! Incident direct+diffuse radiation equals (absorbed+bulk_transmitted+bulk_reflected)
              energy_sum = (mu_not*pi*flx_slrd_lcl(bnd_idx)) + flx_slri_lcl(bnd_idx) - (F_abs_sum + F_btm_net + F_sfc_pls)
              if (abs(energy_sum) > 0.00001_r8) then
-                write (iulog,"(a,e12.6,a,i6,a,i6)") "SNICAR ERROR: Energy conservation error of : ", energy_sum, &
+                write (LIS_logunit,"(a,e12.6,a,i6,a,i6)") "SNICAR ERROR: Energy conservation error of : ", energy_sum, &
                              " at timestep: ", nstep, " at column: ", c_idx
                 call endrun()
              endif
@@ -985,30 +992,30 @@ contains
              ! Check that albedo is less than 1
              if (albout_lcl(bnd_idx) > 1.0) then
 
-                write (iulog,*) "SNICAR ERROR: Albedo > 1.0 at c: ", c_idx, " NSTEP= ",nstep
-                write (iulog,*) "SNICAR STATS: bnd_idx= ",bnd_idx
-                write (iulog,*) "SNICAR STATS: albout_lcl(bnd)= ",albout_lcl(bnd_idx), " albsfc_lcl(bnd_idx)= ",albsfc_lcl(bnd_idx)
-                write (iulog,*) "SNICAR STATS: landtype= ", sfctype
-                write (iulog,*) "SNICAR STATS: h2osno= ", h2osno_lcl, " snl= ", snl_lcl
-                write (iulog,*) "SNICAR STATS: coszen= ", coszen(c_idx), " flg_slr= ", flg_slr_in
+                write (LIS_logunit,*) "SNICAR ERROR: Albedo > 1.0 at c: ", c_idx, " NSTEP= ",nstep
+                write (LIS_logunit,*) "SNICAR STATS: bnd_idx= ",bnd_idx
+                write (LIS_logunit,*) "SNICAR STATS: albout_lcl(bnd)= ",albout_lcl(bnd_idx), " albsfc_lcl(bnd_idx)= ",albsfc_lcl(bnd_idx)
+                write (LIS_logunit,*) "SNICAR STATS: landtype= ", sfctype
+                write (LIS_logunit,*) "SNICAR STATS: h2osno= ", h2osno_lcl, " snl= ", snl_lcl
+                write (LIS_logunit,*) "SNICAR STATS: coszen= ", coszen(c_idx), " flg_slr= ", flg_slr_in
 
-                write (iulog,*) "SNICAR STATS: soot(-4)= ", mss_cnc_aer_lcl(-4,1)
-                write (iulog,*) "SNICAR STATS: soot(-3)= ", mss_cnc_aer_lcl(-3,1)
-                write (iulog,*) "SNICAR STATS: soot(-2)= ", mss_cnc_aer_lcl(-2,1)
-                write (iulog,*) "SNICAR STATS: soot(-1)= ", mss_cnc_aer_lcl(-1,1)
-                write (iulog,*) "SNICAR STATS: soot(0)= ", mss_cnc_aer_lcl(0,1)
+                write (LIS_logunit,*) "SNICAR STATS: soot(-4)= ", mss_cnc_aer_lcl(-4,1)
+                write (LIS_logunit,*) "SNICAR STATS: soot(-3)= ", mss_cnc_aer_lcl(-3,1)
+                write (LIS_logunit,*) "SNICAR STATS: soot(-2)= ", mss_cnc_aer_lcl(-2,1)
+                write (LIS_logunit,*) "SNICAR STATS: soot(-1)= ", mss_cnc_aer_lcl(-1,1)
+                write (LIS_logunit,*) "SNICAR STATS: soot(0)= ", mss_cnc_aer_lcl(0,1)
 
-                write (iulog,*) "SNICAR STATS: L_snw(-4)= ", L_snw(-4)
-                write (iulog,*) "SNICAR STATS: L_snw(-3)= ", L_snw(-3)
-                write (iulog,*) "SNICAR STATS: L_snw(-2)= ", L_snw(-2)
-                write (iulog,*) "SNICAR STATS: L_snw(-1)= ", L_snw(-1)
-                write (iulog,*) "SNICAR STATS: L_snw(0)= ", L_snw(0)
+                write (LIS_logunit,*) "SNICAR STATS: L_snw(-4)= ", L_snw(-4)
+                write (LIS_logunit,*) "SNICAR STATS: L_snw(-3)= ", L_snw(-3)
+                write (LIS_logunit,*) "SNICAR STATS: L_snw(-2)= ", L_snw(-2)
+                write (LIS_logunit,*) "SNICAR STATS: L_snw(-1)= ", L_snw(-1)
+                write (LIS_logunit,*) "SNICAR STATS: L_snw(0)= ", L_snw(0)
 
-                write (iulog,*) "SNICAR STATS: snw_rds(-4)= ", snw_rds(c_idx,-4)
-                write (iulog,*) "SNICAR STATS: snw_rds(-3)= ", snw_rds(c_idx,-3)
-                write (iulog,*) "SNICAR STATS: snw_rds(-2)= ", snw_rds(c_idx,-2)
-                write (iulog,*) "SNICAR STATS: snw_rds(-1)= ", snw_rds(c_idx,-1)
-                write (iulog,*) "SNICAR STATS: snw_rds(0)= ", snw_rds(c_idx,0)
+                write (LIS_logunit,*) "SNICAR STATS: snw_rds(-4)= ", snw_rds(c_idx,-4)
+                write (LIS_logunit,*) "SNICAR STATS: snw_rds(-3)= ", snw_rds(c_idx,-3)
+                write (LIS_logunit,*) "SNICAR STATS: snw_rds(-2)= ", snw_rds(c_idx,-2)
+                write (LIS_logunit,*) "SNICAR STATS: snw_rds(-1)= ", snw_rds(c_idx,-1)
+                write (LIS_logunit,*) "SNICAR STATS: snw_rds(0)= ", snw_rds(c_idx,0)
                 
                 call endrun()
              endif
@@ -1362,125 +1369,137 @@ contains
         
   end subroutine SnowAge_grain
 
-!YDT xxxxxxxxxxxxxxxxxxx start of turn off xxxxxxxxxxxxxxxxxxxxxxxxx
-#if 0 
 
   subroutine SnowOptics_init( )
-    use fileutils       , only : getfil
-    use CLM_varctl      , only : fsnowoptics
+    use netcdf
+!    use fileutils       , only : getfil
+    use clm_varctl      , only : fsnowoptics
     use spmdMod         , only : masterproc
-    use ncdio_pio       , only : file_desc_t, ncd_io, ncd_pio_openfile, ncd_pio_closefile
+!    use ncdio_pio       , only : file_desc_t, ncd_io, ncd_pio_openfile, ncd_pio_closefile
+    use LIS_logMod 
    
-    type(file_desc_t)  :: ncid                        ! netCDF file id
+!    type(file_desc_t)  :: ncid                        ! netCDF file id
+    integer            :: ncid                        ! netCDF file id
     character(len=256) :: locfn                       ! local filename
     character(len= 32) :: subname = 'SnowOptics_init' ! subroutine name
     integer            :: ier                         ! error status
 
-
     !
     ! Open optics file:
-    if(masterproc) write(iulog,*) 'Attempting to read snow optical properties .....'
-    call getfil (fsnowoptics, locfn, 0)
-    call ncd_pio_openfile(ncid, locfn, 0)
-    if(masterproc) write(iulog,*) subname,trim(fsnowoptics)
+    if(masterproc) write(LIS_logunit,*) 'Attempting to read snow optical properties .....'
+!    call getfil (fsnowoptics, locfn, 0)
+!    call ncd_pio_openfile(ncid, locfn, 0)
+
+    ier = nf90_open(path=fsnowoptics, mode=NF90_NOWRITE, ncid=ncid)
+    
+    if (ier /= NF90_NOERR) then
+       call endrun(subname//'ERROR: Failed to open file')
+    end if
+
+    if(masterproc) write(LIS_logunit,*) subname, trim(fsnowoptics)
 
     ! direct-beam snow Mie parameters:
-    call ncd_io('ss_alb_ice_drc', ss_alb_snw_drc,            'read', ncid, posNOTonfile=.true.)
-    call ncd_io( 'asm_prm_ice_drc',asm_prm_snw_drc,          'read', ncid, posNOTonfile=.true.)
-    call ncd_io( 'ext_cff_mss_ice_drc', ext_cff_mss_snw_drc, 'read', ncid, posNOTonfile=.true.)
+    call clm45_snow_io( 'ss_alb_ice_drc', ss_alb_snw_drc,           'read', ncid, posNOTonfile=.true.)
+    call clm45_snow_io( 'asm_prm_ice_drc',asm_prm_snw_drc,          'read', ncid, posNOTonfile=.true.)
+    call clm45_snow_io( 'ext_cff_mss_ice_drc', ext_cff_mss_snw_drc, 'read', ncid, posNOTonfile=.true.)
 
     ! diffuse snow Mie parameters
-    call ncd_io( 'ss_alb_ice_dfs', ss_alb_snw_dfs,           'read', ncid, posNOTonfile=.true.)
-    call ncd_io( 'asm_prm_ice_dfs', asm_prm_snw_dfs,         'read', ncid, posNOTonfile=.true.)
-    call ncd_io( 'ext_cff_mss_ice_dfs', ext_cff_mss_snw_dfs, 'read', ncid, posNOTonfile=.true.)
+    call clm45_snow_io( 'ss_alb_ice_dfs', ss_alb_snw_dfs,           'read', ncid, posNOTonfile=.true.)
+    call clm45_snow_io( 'asm_prm_ice_dfs', asm_prm_snw_dfs,         'read', ncid, posNOTonfile=.true.)
+    call clm45_snow_io( 'ext_cff_mss_ice_dfs', ext_cff_mss_snw_dfs, 'read', ncid, posNOTonfile=.true.)
 
     ! BC species 1 Mie parameters
-    call ncd_io( 'ss_alb_bcphil', ss_alb_bc1,           'read', ncid, posNOTonfile=.true.)
-    call ncd_io( 'asm_prm_bcphil', asm_prm_bc1,         'read', ncid, posNOTonfile=.true.)
-    call ncd_io( 'ext_cff_mss_bcphil', ext_cff_mss_bc1, 'read', ncid, posNOTonfile=.true.)
+    call clm45_snow_io( 'ss_alb_bcphil', ss_alb_bc1,           'read', ncid, posNOTonfile=.true.)
+    call clm45_snow_io( 'asm_prm_bcphil', asm_prm_bc1,         'read', ncid, posNOTonfile=.true.)
+    call clm45_snow_io( 'ext_cff_mss_bcphil', ext_cff_mss_bc1, 'read', ncid, posNOTonfile=.true.)
 
     ! BC species 2 Mie parameters
-    call ncd_io( 'ss_alb_bcphob', ss_alb_bc2,           'read', ncid, posNOTonfile=.true.)
-    call ncd_io( 'asm_prm_bcphob', asm_prm_bc2,         'read', ncid, posNOTonfile=.true.)
-    call ncd_io( 'ext_cff_mss_bcphob', ext_cff_mss_bc2, 'read', ncid, posNOTonfile=.true.)
+    call clm45_snow_io( 'ss_alb_bcphob', ss_alb_bc2,           'read', ncid, posNOTonfile=.true.)
+    call clm45_snow_io( 'asm_prm_bcphob', asm_prm_bc2,         'read', ncid, posNOTonfile=.true.)
+    call clm45_snow_io( 'ext_cff_mss_bcphob', ext_cff_mss_bc2, 'read', ncid, posNOTonfile=.true.)
 
     ! OC species 1 Mie parameters
-    call ncd_io( 'ss_alb_ocphil', ss_alb_oc1,           'read', ncid, posNOTonfile=.true.)
-    call ncd_io( 'asm_prm_ocphil', asm_prm_oc1,         'read', ncid, posNOTonfile=.true.)
-    call ncd_io( 'ext_cff_mss_ocphil', ext_cff_mss_oc1, 'read', ncid, posNOTonfile=.true.)
+    call clm45_snow_io( 'ss_alb_ocphil', ss_alb_oc1,           'read', ncid, posNOTonfile=.true.)
+    call clm45_snow_io( 'asm_prm_ocphil', asm_prm_oc1,         'read', ncid, posNOTonfile=.true.)
+    call clm45_snow_io( 'ext_cff_mss_ocphil', ext_cff_mss_oc1, 'read', ncid, posNOTonfile=.true.)
 
     ! OC species 2 Mie parameters
-    call ncd_io( 'ss_alb_ocphob', ss_alb_oc2,           'read', ncid, posNOTonfile=.true.)
-    call ncd_io( 'asm_prm_ocphob', asm_prm_oc2,         'read', ncid, posNOTonfile=.true.)
-    call ncd_io( 'ext_cff_mss_ocphob', ext_cff_mss_oc2, 'read', ncid, posNOTonfile=.true.)
+    call clm45_snow_io( 'ss_alb_ocphob', ss_alb_oc2,           'read', ncid, posNOTonfile=.true.)
+    call clm45_snow_io( 'asm_prm_ocphob', asm_prm_oc2,         'read', ncid, posNOTonfile=.true.)
+    call clm45_snow_io( 'ext_cff_mss_ocphob', ext_cff_mss_oc2, 'read', ncid, posNOTonfile=.true.)
 
     ! dust species 1 Mie parameters
-    call ncd_io( 'ss_alb_dust01', ss_alb_dst1,           'read', ncid, posNOTonfile=.true.)
-    call ncd_io( 'asm_prm_dust01', asm_prm_dst1,         'read', ncid, posNOTonfile=.true.)
-    call ncd_io( 'ext_cff_mss_dust01', ext_cff_mss_dst1, 'read', ncid, posNOTonfile=.true.)
+    call clm45_snow_io( 'ss_alb_dust01', ss_alb_dst1,           'read', ncid, posNOTonfile=.true.)
+    call clm45_snow_io( 'asm_prm_dust01', asm_prm_dst1,         'read', ncid, posNOTonfile=.true.)
+    call clm45_snow_io( 'ext_cff_mss_dust01', ext_cff_mss_dst1, 'read', ncid, posNOTonfile=.true.)
 
     ! dust species 2 Mie parameters
-    call ncd_io( 'ss_alb_dust02', ss_alb_dst2,           'read', ncid, posNOTonfile=.true.)
-    call ncd_io( 'asm_prm_dust02', asm_prm_dst2,         'read', ncid, posNOTonfile=.true.)
-    call ncd_io( 'ext_cff_mss_dust02', ext_cff_mss_dst2, 'read', ncid, posNOTonfile=.true.)
+    call clm45_snow_io( 'ss_alb_dust02', ss_alb_dst2,           'read', ncid, posNOTonfile=.true.)
+    call clm45_snow_io( 'asm_prm_dust02', asm_prm_dst2,         'read', ncid, posNOTonfile=.true.)
+    call clm45_snow_io( 'ext_cff_mss_dust02', ext_cff_mss_dst2, 'read', ncid, posNOTonfile=.true.)
 
     ! dust species 3 Mie parameters
-    call ncd_io( 'ss_alb_dust03', ss_alb_dst3,           'read', ncid, posNOTonfile=.true.)
-    call ncd_io( 'asm_prm_dust03', asm_prm_dst3,         'read', ncid, posNOTonfile=.true.)
-    call ncd_io( 'ext_cff_mss_dust03', ext_cff_mss_dst3, 'read', ncid, posNOTonfile=.true.)
+    call clm45_snow_io( 'ss_alb_dust03', ss_alb_dst3,           'read', ncid, posNOTonfile=.true.)
+    call clm45_snow_io( 'asm_prm_dust03', asm_prm_dst3,         'read', ncid, posNOTonfile=.true.)
+    call clm45_snow_io( 'ext_cff_mss_dust03', ext_cff_mss_dst3, 'read', ncid, posNOTonfile=.true.)
 
     ! dust species 4 Mie parameters
-    call ncd_io( 'ss_alb_dust04', ss_alb_dst4,           'read', ncid, posNOTonfile=.true.)
-    call ncd_io( 'asm_prm_dust04', asm_prm_dst4,         'read', ncid, posNOTonfile=.true.)
-    call ncd_io( 'ext_cff_mss_dust04', ext_cff_mss_dst4, 'read', ncid, posNOTonfile=.true.)
+    call clm45_snow_io( 'ss_alb_dust04', ss_alb_dst4,           'read', ncid, posNOTonfile=.true.)
+    call clm45_snow_io( 'asm_prm_dust04', asm_prm_dst4,         'read', ncid, posNOTonfile=.true.)
+    call clm45_snow_io( 'ext_cff_mss_dust04', ext_cff_mss_dst4, 'read', ncid, posNOTonfile=.true.)
 
 
-    call ncd_pio_closefile(ncid)
+!    call ncd_pio_closefile(ncid)
+    ier = nf90_close(ncid) 
+
     if (masterproc) then
 
-       write(iulog,*) 'Successfully read snow optical properties'
+       write(LIS_logunit,*) 'Successfully read snow optical properties'
        ! print some diagnostics:
-       write (iulog,*) 'SNICAR: Mie single scatter albedos for direct-beam ice, rds=100um: ', &
+       write (LIS_logunit,*) 'SNICAR: Mie single scatter albedos for direct-beam ice, rds=100um: ', &
             ss_alb_snw_drc(71,1), ss_alb_snw_drc(71,2), ss_alb_snw_drc(71,3),     &
             ss_alb_snw_drc(71,4), ss_alb_snw_drc(71,5)
-       write (iulog,*) 'SNICAR: Mie single scatter albedos for diffuse ice, rds=100um: ',     &
+       write (LIS_logunit,*) 'SNICAR: Mie single scatter albedos for diffuse ice, rds=100um: ',     &
             ss_alb_snw_dfs(71,1), ss_alb_snw_dfs(71,2), ss_alb_snw_dfs(71,3),     &
             ss_alb_snw_dfs(71,4), ss_alb_snw_dfs(71,5)
        if (DO_SNO_OC) then
-          write (iulog,*) 'SNICAR: Including OC aerosols from snow radiative transfer calculations'
+          write (LIS_logunit,*) 'SNICAR: Including OC aerosols from snow radiative transfer calculations'
        else
-          write (iulog,*) 'SNICAR: Excluding OC aerosols from snow radiative transfer calculations'
+          write (LIS_logunit,*) 'SNICAR: Excluding OC aerosols from snow radiative transfer calculations'
        endif
-       write (iulog,*) 'SNICAR: Mie single scatter albedos for hydrophillic BC: ', &
+       write (LIS_logunit,*) 'SNICAR: Mie single scatter albedos for hydrophillic BC: ', &
             ss_alb_bc1(1), ss_alb_bc1(2), ss_alb_bc1(3), ss_alb_bc1(4), ss_alb_bc1(5)
-       write (iulog,*) 'SNICAR: Mie single scatter albedos for hydrophobic BC: ', &
+       write (LIS_logunit,*) 'SNICAR: Mie single scatter albedos for hydrophobic BC: ', &
             ss_alb_bc2(1), ss_alb_bc2(2), ss_alb_bc2(3), ss_alb_bc2(4), ss_alb_bc2(5)
        if (DO_SNO_OC) then
-          write (iulog,*) 'SNICAR: Mie single scatter albedos for hydrophillic OC: ', &
+          write (LIS_logunit,*) 'SNICAR: Mie single scatter albedos for hydrophillic OC: ', &
                ss_alb_oc1(1), ss_alb_oc1(2), ss_alb_oc1(3), ss_alb_oc1(4), ss_alb_oc1(5)
-          write (iulog,*) 'SNICAR: Mie single scatter albedos for hydrophobic OC: ', &
+          write (LIS_logunit,*) 'SNICAR: Mie single scatter albedos for hydrophobic OC: ', &
                ss_alb_oc2(1), ss_alb_oc2(2), ss_alb_oc2(3), ss_alb_oc2(4), ss_alb_oc2(5)
        endif
-       write (iulog,*) 'SNICAR: Mie single scatter albedos for dust species 1: ', &
+       write (LIS_logunit,*) 'SNICAR: Mie single scatter albedos for dust species 1: ', &
             ss_alb_dst1(1), ss_alb_dst1(2), ss_alb_dst1(3), ss_alb_dst1(4), ss_alb_dst1(5)
-       write (iulog,*) 'SNICAR: Mie single scatter albedos for dust species 2: ', &
+       write (LIS_logunit,*) 'SNICAR: Mie single scatter albedos for dust species 2: ', &
             ss_alb_dst2(1), ss_alb_dst2(2), ss_alb_dst2(3), ss_alb_dst2(4), ss_alb_dst2(5)
-       write (iulog,*) 'SNICAR: Mie single scatter albedos for dust species 3: ', &
+       write (LIS_logunit,*) 'SNICAR: Mie single scatter albedos for dust species 3: ', &
             ss_alb_dst3(1), ss_alb_dst3(2), ss_alb_dst3(3), ss_alb_dst3(4), ss_alb_dst3(5)
-       write (iulog,*) 'SNICAR: Mie single scatter albedos for dust species 4: ', &
+       write (LIS_logunit,*) 'SNICAR: Mie single scatter albedos for dust species 4: ', &
             ss_alb_dst4(1), ss_alb_dst4(2), ss_alb_dst4(3), ss_alb_dst4(4), ss_alb_dst4(5)
-       write(iulog,*)
+       write(LIS_logunit,*)
     end if
 
   end subroutine SnowOptics_init
 
   subroutine SnowAge_init( )
-   use CLM_varctl      , only : fsnowaging
-   use fileutils       , only : getfil
+   use netcdf
+   use clm_varctl      , only : fsnowaging
+!   use fileutils       , only : getfil
    use spmdMod         , only : masterproc
-   use ncdio_pio       , only : file_desc_t, ncd_io, ncd_pio_openfile, ncd_pio_closefile
+   use LIS_logMod 
+!YDT   use ncdio_pio       , only : file_desc_t, ncd_io, ncd_pio_openfile, ncd_pio_closefile
 
-   type(file_desc_t)  :: ncid                        ! netCDF file id
+   !YDT type(file_desc_t)  :: ncid                        ! netCDF file id
+   integer            :: ncid                        ! netCDF file id
    character(len=256) :: locfn                       ! local filename
    character(len= 32) :: subname = 'SnowOptics_init' ! subroutine name
    integer            :: varid                       ! netCDF id's
@@ -1491,31 +1510,137 @@ contains
    allocate(snowage_kappa(idx_rhos_max,idx_Tgrd_max,idx_T_max))
    allocate(snowage_drdt0(idx_rhos_max,idx_Tgrd_max,idx_T_max))
 
-   if(masterproc)  write(iulog,*) 'Attempting to read snow aging parameters .....'
-   call getfil (fsnowaging, locfn, 0)
-   call ncd_pio_openfile(ncid, locfn, 0)
-   if(masterproc) write(iulog,*) subname,trim(fsnowaging)
+   if(masterproc)  write(LIS_logunit,*) 'Attempting to read snow aging parameters .....'
+!YDT   call getfil (fsnowaging, locfn, 0)
+!YDT   call ncd_pio_openfile(ncid, locfn, 0)
+
+    ier = nf90_open(path=fsnowaging, mode=NF90_NOWRITE,ncid=ncid)
+
+   if(masterproc) write(LIS_logunit,*) subname,trim(fsnowaging)
    
     ! snow aging parameters
    
-   call ncd_io('tau', snowage_tau,       'read', ncid, posNOTonfile=.true.)
-   call ncd_io('kappa', snowage_kappa,   'read', ncid, posNOTonfile=.true.)
-   call ncd_io('drdsdt0', snowage_drdt0, 'read', ncid, posNOTonfile=.true.)
+   call clm45_snow_io('tau', snowage_tau,       'read', ncid, posNOTonfile=.true.)
+   call clm45_snow_io('kappa', snowage_kappa,   'read', ncid, posNOTonfile=.true.)
+   call clm45_snow_io('drdsdt0', snowage_drdt0, 'read', ncid, posNOTonfile=.true.)
 
-   call ncd_pio_closefile(ncid)
+   ! call ncd_pio_closefile(ncid)
+   ier = nf90_close(ncid)
+
    if (masterproc) then
       
-      write(iulog,*) 'Successfully read snow aging properties'
+      write(LIS_logunit,*) 'Successfully read snow aging properties'
       
       ! print some diagnostics:
-      write (iulog,*) 'SNICAR: snowage tau for T=263K, dTdz = 100 K/m, rhos = 150 kg/m3: ', snowage_tau(3,11,9)
-      write (iulog,*) 'SNICAR: snowage kappa for T=263K, dTdz = 100 K/m, rhos = 150 kg/m3: ', snowage_kappa(3,11,9)
-      write (iulog,*) 'SNICAR: snowage dr/dt_0 for T=263K, dTdz = 100 K/m, rhos = 150 kg/m3: ', snowage_drdt0(3,11,9)
+      write (LIS_logunit,*) 'SNICAR: snowage tau for T=263K, dTdz = 100 K/m, rhos = 150 kg/m3: ', snowage_tau(3,11,9)
+      write (LIS_logunit,*) 'SNICAR: snowage kappa for T=263K, dTdz = 100 K/m, rhos = 150 kg/m3: ', snowage_kappa(3,11,9)
+      write (LIS_logunit,*) 'SNICAR: snowage dr/dt_0 for T=263K, dTdz = 100 K/m, rhos = 150 kg/m3: ', snowage_drdt0(3,11,9)
    endif
 
   end subroutine SnowAge_init
 
-#endif 
-!YDT xxxxxxxxxxxxxxxxxxx end of turn off xxxxxxxxxxxxxxxxxxxxxxxxx
+
+!------------------------------------------------------------------------
+!BOP
+!
+! !IROUTINE: clm45_snow_io_1d
+!
+! Snow property IO to replace ncd_io  
+!
+! !INTERFACE:
+  subroutine clm45_snow_io_1d(varname, data, flag, ncid, readvar, nt, posNOTonfile)
+
+  use netcdf
+!
+!
+! !ARGUMENTS:
+    implicit none
+    integer, intent(inout) :: ncid      ! netcdf file id
+    character(len=*) , intent(in)    :: flag      ! 'read' or 'write'
+    character(len=*) , intent(in)    :: varname   ! variable name
+    real(r8)         , intent(inout) :: data(:)   ! raw data
+    logical, optional, intent(out)   :: readvar   ! was var read?
+    integer, optional, intent(in)    :: nt        ! time sample index
+    logical          , optional, intent(in) :: posNOTonfile ! position is NOT on this file
+!
+
+    integer  :: varid, ios
+
+    ios = nf90_inq_varid(ncid, trim(varname), varid)
+    call LIS_verify(ios, trim(varname)// ' field not found in the LIS param file')
+    ios = nf90_get_var(ncid, varid, data)
+    call LIS_verify(ios, trim(varname)// ' field not found in the LIS param file')
+    readvar = .true.
+
+    end subroutine clm45_snow_io_1d
+
+
+!------------------------------------------------------------------------
+!BOP
+!
+! !IROUTINE: clm45_snow_io_1d
+!
+! Snow property IO to replace ncd_io
+!
+! !INTERFACE:
+  subroutine clm45_snow_io_2d(varname, data, flag, ncid, readvar, nt, posNOTonfile)
+
+  use netcdf
+!
+!
+! !ARGUMENTS:
+    implicit none
+    integer, intent(inout) :: ncid      ! netcdf file id
+    character(len=*) , intent(in)    :: flag      ! 'read' or 'write'
+    character(len=*) , intent(in)    :: varname   ! variable name
+    real(r8)         , intent(inout) :: data(:, :)   ! raw data
+    logical, optional, intent(out)   :: readvar   ! was var read?
+    integer, optional, intent(in)    :: nt        ! time sample index
+    logical          , optional, intent(in) :: posNOTonfile ! position is NOT on this file
+!
+
+    integer  :: varid, ios
+
+    ios = nf90_inq_varid(ncid, trim(varname), varid)
+    call LIS_verify(ios, trim(varname)// ' field not found in the LIS param file')
+    ios = nf90_get_var(ncid, varid, data)
+    call LIS_verify(ios, trim(varname)// ' field not found in the LIS param file')
+    readvar = .true.
+
+    end subroutine clm45_snow_io_2d
+
+!------------------------------------------------------------------------
+!BOP
+!
+! !IROUTINE: clm45_snow_io_3d
+!
+! Snow property IO to replace ncd_io
+!
+! !INTERFACE:
+  subroutine clm45_snow_io_3d(varname, data, flag, ncid, readvar, nt, posNOTonfile)
+
+  use netcdf
+!
+!
+! !ARGUMENTS:
+    implicit none
+    integer, intent(inout) :: ncid      ! netcdf file id
+    character(len=*) , intent(in)    :: flag      ! 'read' or 'write'
+    character(len=*) , intent(in)    :: varname   ! variable name
+    real(r8)         , intent(inout) :: data(:, :, :)   ! raw data
+    logical, optional, intent(out)   :: readvar   ! was var read?
+    integer, optional, intent(in)    :: nt        ! time sample index
+    logical          , optional, intent(in) :: posNOTonfile ! position is NOT on this file
+!
+
+    integer  :: varid, ios
+
+    ios = nf90_inq_varid(ncid, trim(varname), varid)
+    call LIS_verify(ios, trim(varname)// ' field not found in the LIS param file')
+    ios = nf90_get_var(ncid, varid, data)
+    call LIS_verify(ios, trim(varname)// ' field not found in the LIS param file')
+    readvar = .true.
+
+    end subroutine clm45_snow_io_3d
 
 end module SNICARMod
