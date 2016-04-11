@@ -1570,7 +1570,7 @@ contains
     call LIS_verify(ios, trim(varname)// ' field not found in the LIS param file')
     ios = nf90_get_var(ncid, varid, data)
     call LIS_verify(ios, trim(varname)// ' field not found in the LIS param file')
-    readvar = .true.
+    if (present(readvar)) readvar = .true.
 
     end subroutine clm45_snow_io_1d
 
@@ -1605,7 +1605,7 @@ contains
     call LIS_verify(ios, trim(varname)// ' field not found in the LIS param file')
     ios = nf90_get_var(ncid, varid, data)
     call LIS_verify(ios, trim(varname)// ' field not found in the LIS param file')
-    readvar = .true.
+    if (present(readvar)) readvar = .true.
 
     end subroutine clm45_snow_io_2d
 
@@ -1639,7 +1639,7 @@ contains
     call LIS_verify(ios, trim(varname)// ' field not found in the LIS param file')
     ios = nf90_get_var(ncid, varid, data)
     call LIS_verify(ios, trim(varname)// ' field not found in the LIS param file')
-    readvar = .true.
+    if (present(readvar)) readvar = .true.
 
     end subroutine clm45_snow_io_3d
 
