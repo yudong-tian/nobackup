@@ -94,7 +94,8 @@ module clm45_driver
   use CNDVMod             , only : dv, histCNDV
   use pftdynMod           , only : pftwt_interp
 #endif
-!YDT disable  use clm45_pftdynMod           , only : pftdyn_interp, pftdyn_wbal_init, pftdyn_wbal
+!YDT  use pftdynMod           , only : pftdyn_interp, pftdyn_wbal_init, pftdyn_wbal
+use pftdynMod           , only : pftdyn_wbal_init
 #ifdef CN
   use pftdynMod           , only : pftdyn_cnbal
 #endif
@@ -105,13 +106,12 @@ module clm45_driver
 !YDT  use restFileMod         , only : restFile_write, restFile_filename
 
 !YDT to be rewritten  use inicPerpMod         , only : inicPerp  
-!YDT  use accFldsMod          , only : updateAccFlds
+  use accFldsMod          , only : updateAccFlds
   use clm45_driverInitMod   , only : clm_driverInit
   use BalanceCheckMod     , only : BeginWaterBalance, BalanceCheck
   use SurfaceRadiationMod , only : SurfaceRadiation
   use Hydrology1Mod       , only : Hydrology1
   use Hydrology2Mod       , only : Hydrology2
-!YDT: timemanager needs to be rewritten 
   use SLakeFluxesMod   , only : SLakeFluxes
   use SLakeTemperatureMod, only : SLakeTemperature
   use SLakeHydrologyMod, only : SLakeHydrology
@@ -134,7 +134,7 @@ module clm45_driver
   use STATICEcosysDynMod  , only : EcosystemDyn
 #endif
   use ActiveLayerMod      , only : alt_calc
-!YDT  use DUSTMod             , only : DustDryDep, DustEmission
+  use DUSTMod             , only : DustDryDep, DustEmission
 !YDT  use clm45_VOCEmissionMod      , only : VOCEmission
 !YDT  use seq_drydep_mod      , only : n_drydep, drydep_method, DD_XLND
   use STATICEcosysDynMod  , only : interpMonthlyVeg
@@ -144,7 +144,7 @@ module clm45_driver
 #endif
   use abortutils          , only : endrun
   use UrbanMod            , only : UrbanAlbedo, UrbanRadiation, UrbanFluxes 
-!YDT  use SNICARMod           , only : SnowAge_grain
+  use SNICARMod           , only : SnowAge_grain
   use clm_atmlnd          , only : clm_map2gcell
 !YDT  use clm_glclnd          , only : create_clm_s2x
 !YDT  use perf_mod
@@ -363,11 +363,12 @@ subroutine clm45_drv(nest, doalb, nextsw_cday, declinp1, declin, rstwr, nlend, r
 !YDT
    if(masterproc) write(iulog,*) 'clm45_drv():  after decomp_vertprofiles() loop' 
 
+!YDT: fpftdyn is ' '; 
+#if 0 
 #if (!defined CNDV)
    if (fpftdyn /= ' ') then
       !YDT call t_startf("pftdyn_interp")
-      !YDT skip for now 3/15/16
-      !YDT call pftdyn_interp  ! change the pft weights
+      call pftdyn_interp  ! change the pft weights
       
 !$OMP PARALLEL DO PRIVATE (nc,g,begg,endg,begl,endl,begc,endc,begp,endp)
       do nc = 1,nclumps
@@ -394,6 +395,7 @@ subroutine clm45_drv(nest, doalb, nextsw_cday, declinp1, declin, rstwr, nlend, r
 !$OMP END PARALLEL DO
       !YDT call t_stopf("pftdyn_interp")
    end if
+#endif
 #endif
 
 !$OMP PARALLEL DO PRIVATE (nc,g,begg,endg,begl,endl,begc,endc,begp,endp)
@@ -429,7 +431,7 @@ subroutine clm45_drv(nest, doalb, nextsw_cday, declinp1, declin, rstwr, nlend, r
 !$OMP PARALLEL DO PRIVATE (nc,begg,endg,begl,endl,begc,endc,begp,endp)
   do nc = 1,nclumps
      call get_clump_bounds(nc, begg, endg, begl, endl, begc, endc, begp, endp)
-!YDT     call pftdyn_wbal_init( begc, endc )
+     call pftdyn_wbal_init( begc, endc )
 
 #if (defined CNDV)
      ! NOTE: Currently CNDV and fpftdyn /= ' ' are incompatible
@@ -591,13 +593,12 @@ subroutine clm45_drv(nest, doalb, nextsw_cday, declinp1, declin, rstwr, nlend, r
 
      !YDT call t_startf('bgc')
 
-     !YDT: turned off 3/15/16 for now
      ! Dust mobilization (C. Zender's modified codes)
-!YDT     call DustEmission(begp, endp, begc, endc, begl, endl, &
-!YDT                       filter(nc)%num_nolakep, filter(nc)%nolakep)
+     call DustEmission(begp, endp, begc, endc, begl, endl, &
+                       filter(nc)%num_nolakep, filter(nc)%nolakep)
 
      ! Dust dry deposition (C. Zender's modified codes)
-!YDT     call DustDryDep(begp, endp)
+     call DustDryDep(begp, endp)
 
      ! VOC emission (A. Guenther's MEGAN (2006) model)
 !YDT     call VOCEmission(begp, endp, &
@@ -668,10 +669,9 @@ subroutine clm45_drv(nest, doalb, nextsw_cday, declinp1, declin, rstwr, nlend, r
      ! Note the snow filters here do not include lakes; SnowAge_grain is called
      ! for lakes from SLakeHydrology.
 
-    !YDT
-!YDT     call SnowAge_grain(begc, endc, &
-!YDT          filter(nc)%num_snowc, filter(nc)%snowc, &
-!YDT          filter(nc)%num_nosnowc, filter(nc)%nosnowc)
+    call SnowAge_grain(begc, endc, &
+          filter(nc)%num_snowc, filter(nc)%snowc, &
+          filter(nc)%num_nosnowc, filter(nc)%nosnowc)
      !YDT call t_stopf('snow_init')
 
      ! ============================================================================
@@ -775,7 +775,7 @@ subroutine clm45_drv(nest, doalb, nextsw_cday, declinp1, declin, rstwr, nlend, r
   ! ============================================================================
 
   !YDT call t_startf('clm_map2gcell')
-!YDT  call clm_map2gcell( )
+   call clm_map2gcell( )
   !YDT call t_stopf('clm_map2gcell')
 
   ! ============================================================================
@@ -784,7 +784,7 @@ subroutine clm45_drv(nest, doalb, nextsw_cday, declinp1, declin, rstwr, nlend, r
   
   if (create_glacier_mec_landunit) then
      !YDT call t_startf('create_s2x')
-!YDT     call create_clm_s2x(init=.false.)
+     !YDT call create_clm_s2x(init=.false.)
      !YDT call t_stopf('create_s2x')
   end if
   
@@ -803,6 +803,7 @@ subroutine clm45_drv(nest, doalb, nextsw_cday, declinp1, declin, rstwr, nlend, r
   call write_diagnostic(wrtdia, nstep)
   !YDT call t_stopf('wrtdiag')
 
+#endif 
   ! ============================================================================
   ! Read initial snow and soil moisture data at each time step
   ! ============================================================================
@@ -829,7 +830,6 @@ subroutine clm45_drv(nest, doalb, nextsw_cday, declinp1, declin, rstwr, nlend, r
 !YDT  call hist_update_hbuf()
   !YDT call t_stopf('hbuf')
 
-#endif 
 
   ! ============================================================================
   ! Call dv (dynamic vegetation) at last time step of year

@@ -56,6 +56,7 @@ contains
    use clm_atmlnd, only : clm_a2l
    use clm_varcon, only : vkc
    use clm_varctl, only : iulog
+   use LIS_logMod, only : LIS_logunit 
 !
 ! !ARGUMENTS:
    implicit none
@@ -172,6 +173,8 @@ contains
               + StabilityFunc1(z0m(n)/obu(n)) &
               + 1.14_r8*((-zeta(n))**0.333_r8-(zetam)**0.333_r8))
       else if (zeta(n) < 0._r8) then
+!YDT
+! write(LIS_logunit, *) 'obu(n)=', obu(n), ' zldis(n)=',  zldis(n), ' z0m(n)=', z0m(n)
          ustar(n) = vkc*um(n)/(log(zldis(n)/z0m(n))&
               - StabilityFunc1(zeta(n))&
               + StabilityFunc1(z0m(n)/obu(n)))

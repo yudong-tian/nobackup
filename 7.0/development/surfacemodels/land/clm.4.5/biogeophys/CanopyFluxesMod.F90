@@ -96,6 +96,7 @@ contains
     use FrictionVelocityMod, only : FrictionVelocity, MoninObukIni
     use spmdMod            , only : masterproc
     use clm_varcon         , only : c14ratio
+    use LIS_logMod	   , only : LIS_logunit 
 !YDT    use perf_mod           , only : t_startf, t_stopf
 !
 ! !ARGUMENTS:
@@ -824,6 +825,8 @@ contains
       lt = min(elai(p)+esai(p), tlsai_crit)
       egvf =(1._r8 - alpha_aero * exp(-lt)) / (1._r8 - alpha_aero * exp(-tlsai_crit))
       displa(p) = egvf * displa(p)
+!YDT
+!write(LIS_logunit, *)'p=', p, ' egvf=', egvf, ' z0mv(p)=', z0mv(p),  ' z0mg(c)=', z0mg(c) 
       z0mv(p)   = exp(egvf * log(z0mv(p)) + (1._r8 - egvf) * log(z0mg(c)))
       z0hv(p)   = z0mv(p)
       z0qv(p)   = z0mv(p)

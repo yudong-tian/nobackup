@@ -55,6 +55,7 @@ module clm45_lsmMod
     use domainMod       , only : domain_check, ldomain, domain_init
     use spmdMod         , only : masterproc, mpicom
     use UrbanInputMod
+    use DUSTMod
     use initGridCellsMod, only : initGridCells
     use perf_mod
     use initSurfAlbMod
@@ -426,7 +427,7 @@ contains
 
       call EcosystemDynini()
 
-!YDT    call Dustini()
+      call Dustini()
 !YDT    call VOCEmission_init( )
 
       call UrbanInitTimeConst()

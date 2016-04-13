@@ -23,8 +23,11 @@ subroutine clm45_f2t(n)
   use LIS_coreMod,        only : LIS_rc, LIS_surface
   use LIS_metforcingMod, only : LIS_FORC_State
   use LIS_FORC_AttributesMod 
-  use LIS_logMod,         only : LIS_verify
+  use LIS_logMod,         only : LIS_verify, LIS_logunit
+  use clmtype
   use clm45_lsmMod
+  use clm_atmlnd, only    : clm_a2l
+  use clm45_decompMod
 
   implicit none
 ! !ARGUMENTS: 
@@ -41,7 +44,7 @@ subroutine clm45_f2t(n)
 !  \end{description}
 !EOP
 
-  integer            :: t,tid,status, g
+  integer            :: t,tid,status, g, c, p, begg, endg, begl, endl, begc, endc, begp, endp
   type(ESMF_Field)   :: tmpField,q2Field,uField,vField,swdField,lwdField
   type(ESMF_Field)   :: psurfField,pcpField,cpcpField,snowfField
   real,pointer       :: tmp(:),q2(:),uwind(:),vwind(:),snowf(:)
@@ -138,37 +141,73 @@ subroutine clm45_f2t(n)
      call LIS_verify(status)
   endif
 
-#if 0 
 
 ! 1-d grid space, begg - endg 
-  do t=1,LIS_rc%npatch(n,LIS_rc%lsm_index)
-     g=LIS_surface(n,LIS_rc%lsm_index)%tile(t)%tile_id  ! to be changed to grid id 
+!YDT  do t=1,LIS_rc%npatch(n,LIS_rc%lsm_index)
+!YDT     g=LIS_surface(n,LIS_rc%lsm_index)%tile(t)%tile_id  ! to be changed to grid id 
+
+   call get_proc_bounds(begg, endg, begl, endl, begc, endc, begp, endp)
+
+   write(LIS_logunit, *)'clm45_f2t: begg, endg, begl, endl, begc, endc, begp, endp'
+   write(LIS_logunit, '(8I7)') begg, endg, begl, endl, begc, endc, begp, endp
+   write(LIS_logunit, *)'-------------------end ----------------------------------'
+   !YDT: 4/13/16: temp fix: where to get these numbers now?
+   Do p = begp, endp
+       pps%displa(p) = 5.  ! displacement height (m)
+       pps%z0mv(p) = 12.      !roughness length over vegetation, momentum [m]
+       pps%z0m(p) = 10.      !roughness length over vegetation, momentum [m]
+       pps%htop(p) = 15.0     ! canopy top (m)
+   End Do 
+
+   Do c = begc, endc
+     cps%z0mg(c) = 5.0          !roughness length over ground, momentum
+   End do 
+
+   Do g = begg, endg
+
+   !YDT: 4/13/16: temp fix: where to get these numbers now?
+      clm_a2l%forc_hgt_t(g) = 30.0 
+      clm_a2l%forc_hgt_u(g) = 30.0 
+      clm_a2l%forc_hgt_q(g) = 30.0 
+      clm_a2l%forc_rho(g) = 1.225          ! atmospheric density (kg/m**3)
+      clm_a2l%forc_hgt(g) = 6000      ! atm ref height
+
 
      if(LIS_FORC_Tair%selectOpt.eq.1) then
-       clm45_struc(n)%clm_a2l%forc_t(g)=tmp(g)
+       !clm45_struc(n)%clm_a2l%forc_t(g)=tmp(g)
+       clm_a2l%forc_t(g)=tmp(g)
+       clm_a2l%forc_th(g)=tmp(g)  !YDT temp fix 
      endif
      if(LIS_FORC_Qair%selectOpt.eq.1) then
-       clm45_struc(n)%clm_a2l%forc_q(g)=q2(g)
+       !clm45_struc(n)%clm_a2l%forc_q(g)=q2(g)
+       clm_a2l%forc_q(g)=q2(g)
      endif
      if(LIS_FORC_SWdown%selectOpt.eq.1) then
-       clm45_struc(n)%clm_a2l%forc_solar(g)=swd(g)
+       !clm45_struc(n)%clm_a2l%forc_solar(g)=swd(g)
+       clm_a2l%forc_solar(g)=swd(g)
      endif
      if(LIS_FORC_LWdown%selectOpt.eq.1) then
-       clm45_struc(n)%clm_a2l%forc_lwrad(g)=lwd(g)
+       !clm45_struc(n)%clm_a2l%forc_lwrad(g)=lwd(g)
+       clm_a2l%forc_lwrad(g)=lwd(g)
      endif
      if(LIS_FORC_Wind_E%selectOpt.eq.1) then
-       clm45_struc(n)%clm_a2l%forc_u(g)=uwind(g)
+       !clm45_struc(n)%clm_a2l%forc_u(g)=uwind(g)
+       clm_a2l%forc_u(g)=uwind(g)
      endif
      if(LIS_FORC_Wind_N%selectOpt.eq.1) then
-       clm45_struc(n)%clm_a2l%forc_v(g)=vwind(g)
+       !clm45_struc(n)%clm_a2l%forc_v(g)=vwind(g)
+       clm_a2l%forc_v(g)=vwind(g)
      endif
      if(LIS_FORC_Psurf%selectOpt.eq.1) then
-       clm45_struc(n)%clm_a2l%forc_pbot(g)=psurf(g)
+       !clm45_struc(n)%clm_a2l%forc_pbot(g)=psurf(g)
+       clm_a2l%forc_pbot(g)=psurf(g)
      endif
      if(pcp(g).ne.LIS_rc%udef) then
-        clm45_struc(n)%clm_a2l%rainf(g)=pcp(g)
+        !clm45_struc(n)%clm_a2l%rainf(g)=pcp(g)
+        clm_a2l%rainf(g)=pcp(g)
      else
-        clm45_struc(n)%clm_a2l%rainf(g)=0.0
+        !clm45_struc(n)%clm_a2l%rainf(g)=0.0
+        clm_a2l%rainf(g)=0.0
      endif
 !     if(LIS_FORC_CRainf%selectOpt.eq.1) then 
 !        if(cpcp(g).ne.LIS_rc%udef) then 
@@ -185,8 +224,5 @@ subroutine clm45_f2t(n)
 !        endif
 !     endif
   enddo
-
-#endif
-
 
 end subroutine clm45_f2t

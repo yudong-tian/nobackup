@@ -713,7 +713,7 @@ contains
 
                    tau(i)    = tau_sum + tau_snw(i)
 !YDT debugging 
-                 write(LIS_logunit, *) 'fc=', fc, ' h2osno_lcl=', h2osno_lcl, 'tau(i)=', tau(i), ' tau_snw(i)=', tau_snw(i) 
+!                 write(LIS_logunit, *) 'fc=', fc, ' h2osno_lcl=', h2osno_lcl, 'tau(i)=', tau(i), ' tau_snw(i)=', tau_snw(i) 
 
                    omega(i)  = (1/tau(i))*(omega_sum+(ss_alb_snw_lcl(i)*tau_snw(i)))
                    g(i)      = (1/(tau(i)*omega(i)))*(g_sum+ (asm_prm_snw_lcl(i)*ss_alb_snw_lcl(i)*tau_snw(i)))
