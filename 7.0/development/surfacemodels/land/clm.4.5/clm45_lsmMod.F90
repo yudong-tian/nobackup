@@ -36,7 +36,7 @@ module clm45_lsmMod
 
     use netcdf
   !CLM45 native modules
-    use clmtypeInitMod  , only : initClmtype
+    use clmtypeInitMod  
     use clmtype
     use clm_time_manager , only : get_nstep, get_step_size, set_timemgr_init, timemgr_init, &
                                   get_curr_calday, get_curr_date
@@ -367,6 +367,12 @@ contains
       write(LIS_logunit,*) '============================================================================' 
       write(LIS_logunit,'(8I7)') begg, endg, begl, endl, begc, endc, begp, endp
       write(LIS_logunit,*) 
+
+      !initialize a copy of the variables for LIS to access
+      !YDT 
+      call init_pft_pstate_type(begp, endp, clm45_struc(n)%pps) 
+      call init_pft_eflux_type(begp, endp, clm45_struc(n)%pef) 
+      call init_pft_wflux_type(begp, endp, clm45_struc(n)%pwf) 
 
       ! read other parameters need to create the full glcp suite
      call clm45_surfrd_get_grid(n, ldomain) 

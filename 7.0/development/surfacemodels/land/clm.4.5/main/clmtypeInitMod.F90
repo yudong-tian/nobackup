@@ -45,42 +45,43 @@ module clmtypeInitMod
 #if (defined CNDV)
   private :: init_pft_DGVMecophys_constants
 #endif
-  private :: init_pft_pstate_type
-  private :: init_pft_epv_type
+!YDT  private :: init_pft_pstate_type
+  public :: init_pft_pstate_type
+  public :: init_pft_epv_type
 #if (defined CNDV)
-  private :: init_pft_pdgvstate_type
+  public :: init_pft_pdgvstate_type
 #endif
-  private :: init_pft_vstate_type
-  private :: init_pft_estate_type
-  private :: init_pft_wstate_type
-  private :: init_pft_cstate_type
-  private :: init_pft_nstate_type
-  private :: init_pft_eflux_type
-  private :: init_pft_mflux_type
-  private :: init_pft_wflux_type
-  private :: init_pft_cflux_type
-  private :: init_pft_nflux_type
-  private :: init_pft_vflux_type
-  private :: init_pft_dflux_type
-  private :: init_pft_depvd_type
-  private :: init_column_pstate_type
-  private :: init_column_estate_type
-  private :: init_column_wstate_type
-  private :: init_column_cstate_type
-  private :: init_column_nstate_type
-  private :: init_column_eflux_type
-  private :: init_column_wflux_type
-  private :: init_column_cflux_type
+  public :: init_pft_vstate_type
+  public :: init_pft_estate_type
+  public :: init_pft_wstate_type
+  public :: init_pft_cstate_type
+  public :: init_pft_nstate_type
+  public :: init_pft_eflux_type
+  public :: init_pft_mflux_type
+  public :: init_pft_wflux_type
+  public :: init_pft_cflux_type
+  public :: init_pft_nflux_type
+  public :: init_pft_vflux_type
+  public :: init_pft_dflux_type
+  public :: init_pft_depvd_type
+  public :: init_column_pstate_type
+  public :: init_column_estate_type
+  public :: init_column_wstate_type
+  public :: init_column_cstate_type
+  public :: init_column_nstate_type
+  public :: init_column_eflux_type
+  public :: init_column_wflux_type
+  public :: init_column_cflux_type
 #ifdef LCH4
-  private :: init_column_ch4_type
+  public :: init_column_ch4_type
 #endif
-  private :: init_column_nflux_type
-  private :: init_landunit_pstate_type
-  private :: init_landunit_eflux_type
-  private :: init_gridcell_efstate_type
-  private :: init_gridcell_wflux_type
+  public :: init_column_nflux_type
+  public :: init_landunit_pstate_type
+  public :: init_landunit_eflux_type
+  public :: init_gridcell_efstate_type
+  public :: init_gridcell_wflux_type
 #ifdef LCH4
-  private :: init_gridcell_ch4_type
+  public :: init_gridcell_ch4_type
 #endif
 !EOP
 !----------------------------------------------------
