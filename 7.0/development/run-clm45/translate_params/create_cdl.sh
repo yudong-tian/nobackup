@@ -89,9 +89,8 @@ EOFa
 
 cat surfdata.vars.txt | while read var; do
 
-  #newvar=`echo $var | sed 's/lsmlon/east_west/g' |sed 's/lsmlat/north_south/g' |sed 's/time/month/g' ` 
-  # do not translate dimension names for surfvariables 
-  newvar=$var 
+  newvar=`echo $var | sed 's/lsmlon/east_west/g' |sed 's/lsmlat/north_south/g' |sed 's/time/month/g' ` 
+  #newvar=$var 
   varname=`echo $newvar | sed 's/[,();]/ /g' | awk '{print \$2}'`
 
   cat >> $cdlf <<EOF2
@@ -211,7 +210,7 @@ data:
 
  mxsoil_color = 20 ;
 
- time = 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 ;
+ month = 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 ;
 
 }
 EOF3
