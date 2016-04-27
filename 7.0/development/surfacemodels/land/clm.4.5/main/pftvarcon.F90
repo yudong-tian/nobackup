@@ -262,9 +262,7 @@ contains
 
     ! Set specific vegetation type values
 
-    if (masterproc) then
-       write(LIS_logunit,*) 'Attempting to read PFT physiological data .....'
-    end if
+    write(LIS_logunit,*) 'Attempting to read PFT physiological data .....'
 
     ios = nf90_open(path=locfn, &
              mode=NF90_NOWRITE,ncid=ncid)
@@ -556,10 +554,8 @@ contains
        end if
     end do
 
-    if (masterproc) then
        write(LIS_logunit,*) 'Successfully read PFT physiological data'
        write(LIS_logunit,*)
-    end if
 
   end subroutine clm45_pftconrd
 

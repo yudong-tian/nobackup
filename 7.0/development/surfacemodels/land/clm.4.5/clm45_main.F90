@@ -102,6 +102,7 @@ subroutine clm45_main (n)
     real(r8) :: declinp1              ! solar declination angle in radians for nstep+1
     real(r8) :: eccf                  ! earth orbit eccentricity factor
     real(r8) :: recip                 ! reciprical
+    real(r8) :: tmp_num       !temperary
     character(len=32)            :: rdate       ! date char string for restart file names
 
 ! -----------------------------------------------------------------
@@ -120,17 +121,43 @@ if(alarmCheck) then
 
 !YDT: copy model data to clm45_struc
   ! CLM-> LIS 
-  do k=1, LIS_rc%npatch(n,LIS_rc%lsm_index)
      clm45_struc(n)%pps = pps 
      clm45_struc(n)%pef = pef 
      clm45_struc(n)%pwf = pwf 
-  end do 
 
 ! ----------------------------------------------------------------------
 ! Write global average diagnostics to standard output
 ! ----------------------------------------------------------------------
+  write(LIS_logunit, *)'LIS_rc%npatch(n,LIS_rc%lsm_index)=', LIS_rc%npatch(n,LIS_rc%lsm_index)
   do k=1, LIS_rc%npatch(n,LIS_rc%lsm_index)
-     call LIS_diagnoseSurfaceOutputVar(n, k,LIS_MOC_SWNET,&
+
+     ! replace inactive pft values from NaN to Undefined
+     if ( .not. pft%active(k) ) then 
+        clm45_struc(n)%pef%fsa(k) = LIS_rc%udef
+        clm45_struc(n)%pef%eflx_lwrad_net(k) = LIS_rc%udef
+        clm45_struc(n)%pef%eflx_lh_tot(k) = LIS_rc%udef
+        clm45_struc(n)%pef%eflx_sh_tot(k) = LIS_rc%udef
+        clm45_struc(n)%pef%eflx_soil_grnd(k) = LIS_rc%udef
+        clm45_struc(n)%pwf%qflx_evap_tot(k) = LIS_rc%udef
+        clm45_struc(n)%pwf%qflx_evap_veg(k) = LIS_rc%udef
+        clm45_struc(n)%pwf%qflx_tran_veg(k) = LIS_rc%udef
+        clm45_struc(n)%pwf%qflx_sub_snow(k) = LIS_rc%udef
+      end if 
+        call nan2udef(clm45_struc(n)%pef%fsa(k))
+        call nan2udef( clm45_struc(n)%pef%eflx_lwrad_net(k)) 
+        call nan2udef( clm45_struc(n)%pef%eflx_lh_tot(k)) 
+        call nan2udef( clm45_struc(n)%pef%eflx_sh_tot(k)) 
+        call nan2udef( clm45_struc(n)%pef%eflx_soil_grnd(k)) 
+        call nan2udef( clm45_struc(n)%pwf%qflx_evap_tot(k)) 
+        call nan2udef( clm45_struc(n)%pwf%qflx_evap_veg(k)) 
+        call nan2udef( clm45_struc(n)%pwf%qflx_tran_veg(k)) 
+        call nan2udef( clm45_struc(n)%pwf%qflx_sub_snow(k)) 
+
+
+     write(LIS_logunit, '(A, I6, A, F10.4, A, F10.4)') 'k=', k, ' pef%fsa(k)=', clm45_struc(n)%pef%fsa(k), &
+           ' pef%eflx_lwrad_net(k)=', clm45_struc(n)%pef%eflx_lwrad_net(k)
+
+     call LIS_diagnoseSurfaceOutputVar(n, k, LIS_MOC_SWNET, &
           value=real(clm45_struc(n)%pef%fsa(k)),&
           vlevel=1,unit="W/m2", direction="DN",&
           surface_type=LIS_rc%lsm_index)
@@ -148,7 +175,7 @@ if(alarmCheck) then
           direction="DN",surface_type=LIS_rc%lsm_index)
 
 !Bowen Ratio - sensible/latent
-     if(clm45_struc(n)%pef%eflx_lh_tot(k).gt.0) then
+     if(clm45_struc(n)%pef%eflx_lh_tot(k).gt.0 .and. pft%active(k) ) then
         call LIS_diagnoseSurfaceOutputVar(n, k,LIS_MOC_BR,&
           value=real(clm45_struc(n)%pef%eflx_sh_tot(k)/clm45_struc(n)%pef%eflx_lh_tot(k)), &
           vlevel=1,unit="-", direction="-",surface_type=LIS_rc%lsm_index)
@@ -159,7 +186,7 @@ if(alarmCheck) then
 
 !Evaporative Fraction
      if( (clm45_struc(n)%pef%eflx_lh_tot(k) + &
-          clm45_struc(n)%pef%eflx_sh_tot(k) ) .ne. 0 ) then
+          clm45_struc(n)%pef%eflx_sh_tot(k) ) .ne. 0  .and. pft%active(k) ) then
         call LIS_diagnoseSurfaceOutputVar(n, k,LIS_MOC_EF,&
           value=real(clm45_struc(n)%pef%eflx_lh_tot(k)/(clm45_struc(n)%pef%eflx_lh_tot(k) + &
           clm45_struc(n)%pef%eflx_sh_tot(k) ) ), vlevel=1,unit="-",&
@@ -339,9 +366,23 @@ if(alarmCheck) then
 #endif
 !gradual fix ---^^^^^^--------------
 
-     call LIS_diagnoseSurfaceOutputVar(n, k,LIS_MOC_ECANOP, value=&
+     if (isnan( clm45_struc(n)%pwf%qflx_evap_veg(k)) ) clm45_struc(n)%pwf%qflx_evap_veg(k) = LIS_rc%udef
+     if (isnan( clm45_struc(n)%pwf%qflx_tran_veg(k)) ) clm45_struc(n)%pwf%qflx_tran_veg(k) = LIS_rc%udef
+     if (isnan( clm45_struc(n)%pwf%qflx_sub_snow(k)) ) clm45_struc(n)%pwf%qflx_sub_snow(k) = LIS_rc%udef
+
+     if ( pft%active(k) ) then 
+      ! write(LIS_logunit, '(A, I6, A, F10.4, A, F10.4)') 'k=', k, 'qflx_evap_veg(k) =', &
+      !    clm45_struc(n)%pwf%qflx_evap_veg(k), ' qflx_tran_veg(k)=', clm45_struc(n)%pwf%qflx_tran_veg(k)
+
+       call LIS_diagnoseSurfaceOutputVar(n, k,LIS_MOC_ECANOP, value=&
           real(clm45_struc(n)%pwf%qflx_evap_veg(k)-clm45_struc(n)%pwf%qflx_tran_veg(k)),&
           vlevel=1,unit="kg/m2s",direction="UP",surface_type=LIS_rc%lsm_index)
+     else 
+       call LIS_diagnoseSurfaceOutputVar(n, k,LIS_MOC_ECANOP, value=&
+          LIS_rc%udef, &
+          vlevel=1,unit="kg/m2s",direction="UP",surface_type=LIS_rc%lsm_index)
+     end if 
+
      call LIS_diagnoseSurfaceOutputVar(n, k,LIS_MOC_TVEG, value=&
           real(clm45_struc(n)%pwf%qflx_tran_veg(k)),vlevel=1,unit="kg/m2s",&
           direction="UP",surface_type=LIS_rc%lsm_index)
@@ -425,4 +466,14 @@ if(alarmCheck) then
 endif   ! --- end of  if(alarmCheck) then 
 return
 end subroutine clm45_main
+
+subroutine nan2udef(x) 
+
+  use LIS_coreMod, only : LIS_rc
+
+   real*8, intent(inout) :: x 
+    
+  if (isnan(x) ) x=LIS_rc%udef 
+
+end subroutine nan2udef
 

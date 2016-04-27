@@ -119,6 +119,12 @@ module clm45_lsmMod
      real                       :: rstInterval
 ! CLM4.5 native types
 ! extracted from  ~/CESM/cesm1_2_2_dev/models/lnd/clm/src/clm4_5/main/clmtype.F90 
+type(pft_pstate_type) :: pps      !physical state variables
+type(pft_eflux_type)  :: pef         !pft energy flux
+type(pft_wflux_type)  :: pwf         !pft water flux
+
+! ----------->>>>> -------not turned on yet -- can these be kept without initialized? 
+#if 0 
 type(energy_balance_type)   :: pebal !energy balance structure
 type(energy_balance_type)   :: cebal !energy balance structure
 type(water_balance_type)    :: pwbal !water balance structure
@@ -127,7 +133,6 @@ type(carbon_balance_type)   :: pcbal !carbon balance structure
 type(carbon_balance_type)   :: ccbal !carbon balance structure
 type(nitrogen_balance_type) :: pnbal !nitrogen balance structure
 type(nitrogen_balance_type) :: cnbal !nitrogen balance structure
-type(pft_pstate_type) :: pps      !physical state variables
 type(pft_pstate_type) :: pps_a    !pft-level pstate variables averaged to the column
 type(pft_psynstate_type)::ppsyns     !photosynthesis relevant variables
 type(pft_epc_type)  :: pftcon
@@ -146,9 +151,7 @@ type(pft_nstate_type) :: pns      !pft nitrogen state
 type(pft_nstate_type) :: pns_a    !pft-level nitrogen state variables averaged to the column
 type(pft_vstate_type) :: pvs         !pft VOC state
 type(pft_dgvstate_type) :: pdgvs     !pft DGVM state variables
-type(pft_eflux_type)  :: pef         !pft energy flux
 type(pft_mflux_type)  :: pmf         !pft momentum flux
-type(pft_wflux_type)  :: pwf         !pft water flux
 type(pft_cflux_type)  :: pcf      !pft carbon flux
 type(pft_cflux_type) :: pcf_a    !pft carbon flux averaged to the column
 type(pft_cflux_type) :: pc13f    !pft carbon-13 flux
@@ -196,7 +199,10 @@ type(landunit_type) :: lun  !geomorphological landunits
 type(gridcell_type) :: grc    !gridcell data structure
 
 !forcing, 
-  type(atm2lnd_type) :: clm_a2l      ! a2l fields on clm grid
+type(atm2lnd_type) :: clm_a2l      ! a2l fields on clm grid
+
+#endif  
+! -----------<<<<<<<<<<<<-not turned on yet -- can these be kept without initialized? 
   end type clm45_type_dec
 
   type(clm45_type_dec), allocatable :: clm45_struc(:)   ! nnest copies 
@@ -237,7 +243,7 @@ contains
 
    integer :: begg, endg, begl, endl, begc, endc, begp, endp
    integer :: ni, nj, ns, ic, ip, il, ig
-   integer :: ier 
+   integer :: ier,  tmpid
 
    masterproc = LIS_masterproc 
    
@@ -304,6 +310,9 @@ contains
    ! Setting control variables, used to be done in clmvarctl_init() 
    ! could be moved to lis config file 
 
+   nsrest = 0   ! cold start 
+   if( LIS_rc%startcode.eq."restart" ) nsrest = 1
+
      create_glacier_mec_landunit = .false.
      allocate_all_vegpfts = .true.  
      single_column = .false.
@@ -353,12 +362,17 @@ contains
      ! Independent of model resolution, Needs to stay before surfrd_get_data
 
      call clm45_pftconrd(clm45_struc(n)%clm_vfile)  
+
      ! need to make nest-dependent (but they are  tile-independent variables and structures ) 
       call clm_varpar_init()   ! number of patches, vertical levels, etc
       call clm_varcon_init()   ! physical constants and thickness of vertical levels 
+
       ! translate LIS decomposed domain into CLM45 domain
       write(LIS_logunit,*) 'clm_varpar_init and clm_varcon_init done. '  
-      call clm45_domain_init(n, ni, nj)
+
+     ni = LIS_ewe_halo_ind(n,LIS_localPet+1) - LIS_ews_halo_ind(n,LIS_localPet+1) + 1 
+     nj = LIS_nse_halo_ind(n,LIS_localPet+1) - LIS_nss_halo_ind(n,LIS_localPet+1) + 1 
+     call clm45_domain_init(n, ni, nj)
 
       ! check if can get grid and pft range now
       call get_proc_bounds (begg, endg, begl, endl, begc, endc, begp, endp)
@@ -368,17 +382,9 @@ contains
       write(LIS_logunit,'(8I7)') begg, endg, begl, endl, begc, endc, begp, endp
       write(LIS_logunit,*) 
 
-      !initialize a copy of the variables for LIS to access
-      !YDT 
-      call init_pft_pstate_type(begp, endp, clm45_struc(n)%pps) 
-      call init_pft_eflux_type(begp, endp, clm45_struc(n)%pef) 
-      call init_pft_wflux_type(begp, endp, clm45_struc(n)%pwf) 
-
       ! read other parameters need to create the full glcp suite
      call clm45_surfrd_get_grid(n, ldomain) 
-     if (masterproc) then
-       call domain_check(ldomain)
-     endif
+     call domain_check(ldomain)
 
     ! Initialize urban model input (initialize urbinp data structure)
     call clm45_UrbanInput(n, mode='initialize')
@@ -413,6 +419,13 @@ contains
      call decompInit_glcp (n, ni*nj, ni, nj)
 
      call initClmtype()
+
+      !initialize a copy of the variables for LIS to access
+      !YDT 
+      call init_pft_pstate_type(begp, endp, clm45_struc(n)%pps) 
+      call init_pft_eflux_type(begp, endp, clm45_struc(n)%pef) 
+      call init_pft_wflux_type(begp, endp, clm45_struc(n)%pwf) 
+
 
      call init_atm2lnd_type(begg, endg, clm_a2l)
      call init_lnd2atm_type(begg, endg, clm_l2a)  ! should not be needed 
@@ -517,7 +530,7 @@ contains
        ! Determine gridcell averaged properties to send to atm
        call print_glcp('p')  !debugging print
 
-       write(LIS_logunit, *) pps%albd
+!       write(LIS_logunit, *) pps%albd
 
        call t_startf('init_map2gc')
        call clm_map2gcell(init=.true.)
@@ -568,6 +581,7 @@ contains
 ! !USES:
     use LIS_coreMod
     use LIS_precisionMod
+    use LIS_LMLCMod
  
     use clm45_decompMod
 ! !DESCRIPTION:
@@ -656,6 +670,7 @@ contains
     End Do 
 
     call get_proc_bounds(beg, end)
+    write(LIS_logunit,*) 'Domain to be initialed with beg=', beg, ' end=', end 
     call domain_init(ldomain, isgrid2d=isgrid2d, ni=lni, nj=lnj, nbeg=beg, nend=end)
 
     numg = end - beg + 1
@@ -673,9 +688,11 @@ contains
           do aj = 1,lnj
             do ai = 1,lni
                 an = (aj-1)*lni + ai
-                ag = ag + 1
-                ldecomp%gdc2glo(ag) = an
-                ldecomp%glo2gdc(an) = ag
+                if (LIS_LMLC(n)%landmask(ai,aj) .gt. 0 ) then 
+                  ag = ag + 1
+                  ldecomp%gdc2glo(ag) = an
+                  ldecomp%glo2gdc(an) = ag
+                end if 
             end do
           end do
 

@@ -159,6 +159,10 @@ subroutine clm45_f2t(n)
        pps%htop(p) = 15.0     ! canopy top (m)
    End Do 
 
+   !copy 
+   !clm45_struc(n)%pps = pps
+
+
    Do c = begc, endc
      cps%z0mg(c) = 5.0          !roughness length over ground, momentum
    End do 

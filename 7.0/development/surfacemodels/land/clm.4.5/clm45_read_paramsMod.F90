@@ -73,12 +73,11 @@ contains
 ! !INTERFACE:
   subroutine read_clm45_param_to_local_g1d(n, var, varname, readvar)
 ! !USES:
-   use LIS_surfaceModelDataMod, only : LIS_sfmodel_struc
    use LIS_coreMod
-   use LIS_timeMgrMod,   only : LIS_clock, LIS_calendar, &
-        LIS_update_timestep, LIS_registerAlarm
+   !use LIS_timeMgrMod,   only : LIS_clock, LIS_calendar, &
+   !     LIS_update_timestep, LIS_registerAlarm
    use LIS_logMod,       only : LIS_verify, LIS_logunit
-   use shr_sys_mod , only : shr_sys_flush
+   !use shr_sys_mod , only : shr_sys_flush
 ! !DESCRIPTION:
 ! Subroutine to read a global 2D variable from LDT into local variable, 1-D grid space.
 !
@@ -101,13 +100,14 @@ contains
     integer                    :: k, gindex
     logical                    :: file_exists
     real,      allocatable     :: globalvar(:,:)
-    real    :: localvar(LIS_rc%lnc(n),LIS_rc%lnr(n))
+    !real    :: localvar(LIS_rc%lnc(n),LIS_rc%lnr(n))
+    real, allocatable    :: localvar(:, :) 
 
 #if (defined USE_NETCDF3 || defined USE_NETCDF4)
 
-       write(LIS_logunit, *) "Reading surface parameter: ", trim(varname) 
+       write(LIS_logunit, *) "Reading surface parameter: ", trim(varname), " from", trim(LIS_rc%paramfile(n))  
 
-          ios = nf90_open(path=LIS_rc%paramfile(n),&
+          ios = nf90_open(path=trim(LIS_rc%paramfile(n)), &
                mode=NF90_NOWRITE,ncid=ftn)
           call LIS_verify(ios,'Error in nf90_open in read_clm45_params:paramfile')
 
@@ -135,6 +135,7 @@ contains
           ios = nf90_close(ftn)
           call LIS_verify(ios,'Error in nf90_close in read_clm45_params')
 
+          allocate(localvar(LIS_rc%lnc(n),LIS_rc%lnr(n))) 
           localvar(:,:) = &
             globalvar(LIS_ews_halo_ind(n,LIS_localPet+1):&
             LIS_ewe_halo_ind(n,LIS_localPet+1), &
@@ -148,7 +149,8 @@ contains
            var(g) = localvar(LIS_domain(n)%tile(t)%col, LIS_domain(n)%tile(t)%row)
            ! write(LIS_logunit, *) "g=", g, " var(g)= ", var(g)  
           end do
-          if (present(readvar)) readvar = .true. 
+        if (present(readvar)) readvar = .true. 
+        deallocate(localvar) 
 #endif
 
   end subroutine read_clm45_param_to_local_g1d
@@ -290,7 +292,8 @@ contains
     integer                    :: k, gindex
     logical                    :: file_exists
     real,      allocatable     :: globalvar(:,:)
-    real    :: localvar(LIS_rc%lnc(n),LIS_rc%lnr(n))
+    !real    :: localvar(LIS_rc%lnc(n),LIS_rc%lnr(n))
+    real, allocatable   :: localvar(:, :) 
 
 #if (defined USE_NETCDF3 || defined USE_NETCDF4)
 
@@ -321,6 +324,8 @@ contains
           ios = nf90_close(ftn)
           call LIS_verify(ios,'Error in nf90_close in read_clm45_params')
 
+          allocate(localvar(LIS_rc%lnc(n),LIS_rc%lnr(n))) 
+
           localvar(:,:) = &
             globalvar(LIS_ews_halo_ind(n,LIS_localPet+1):&
             LIS_ewe_halo_ind(n,LIS_localPet+1), &
@@ -333,6 +338,7 @@ contains
           end do
           deallocate(globalvar)
           if (present(readvar)) readvar = .true. 
+          deallocate(localvar) 
 #endif
 
   end subroutine read_clm45_param_to_local_g1d_int

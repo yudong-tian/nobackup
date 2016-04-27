@@ -107,7 +107,7 @@ use pftdynMod           , only : pftdyn_wbal_init
 
 !YDT to be rewritten  use inicPerpMod         , only : inicPerp  
   use accFldsMod          , only : updateAccFlds
-  use clm45_driverInitMod   , only : clm_driverInit
+  use clm_driverInitMod   , only : clm_driverInit
   use BalanceCheckMod     , only : BeginWaterBalance, BalanceCheck
   use SurfaceRadiationMod , only : SurfaceRadiation
   use Hydrology1Mod       , only : Hydrology1

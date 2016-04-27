@@ -96,7 +96,7 @@ contains
 !
 ! !ARGUMENTS:
     implicit none
-    integer :: n   ! nest index 
+    integer, intent(in) :: n   ! nest index 
 
     type(domain_type),intent(inout) :: ldomain   ! domain to init
 !YDT    character(len=*) ,intent(in)    :: filename  ! grid filename
@@ -135,11 +135,11 @@ contains
 !
 !EOP
 
+     call read_clm45_param_to_local_g1d(n, ldomain%lonc, 'xc', readvar=readvar)
+     call read_clm45_param_to_local_g1d(n, ldomain%latc, 'yc')
      call read_clm45_param_to_local_g1d(n, ldomain%area, 'area')
       ! convert from radians**2 to km**2
      ldomain%area = ldomain%area * (re**2)
-     call read_clm45_param_to_local_g1d(n, ldomain%lonc, 'xc')
-     call read_clm45_param_to_local_g1d(n, ldomain%latc, 'yc')
      call read_clm45_param_to_local_g1d_int(n, ldomain%mask, 'LANDMASK')
      call read_clm45_param_to_local_g1d(n, ldomain%frac, 'frac')
 
