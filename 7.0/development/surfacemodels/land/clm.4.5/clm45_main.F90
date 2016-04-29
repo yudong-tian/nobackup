@@ -37,6 +37,7 @@ subroutine clm45_main (n)
 
   use LIS_histDataMod
   use LIS_constantsMod,  only : LIS_CONST_RHOFW
+  use clm_atmlnd   ,   only : clm_a2l
 
   implicit none
 ! !ARGUMENTS: 
@@ -51,6 +52,7 @@ subroutine clm45_main (n)
 
 ! ---------------------- local variables --------------------------
   integer  :: j,k,t,m           !loop/array indices
+  integer  :: p, c, l, g           ! indices for pft, column, landunit, and grid 
 !  real :: tvegb(144,76)
   integer  :: dtime               !timestep size [seconds]
   integer  :: nstep               !timestep index
@@ -71,7 +73,9 @@ subroutine clm45_main (n)
   real(r8) :: ulrad
   real(r8) :: tssbef(-5:10)
   
-  REAL     :: soilmr
+  REAL     :: n2u   ! function to convert NaNs to undefs and real*8 to real*4 
+  Logical  :: isudef  ! function to check if a number is undef 
+  REAL     :: soilmr, tmp1, tmp2, tmp3, udef
   REAL     :: roottemp
   real :: vol_ice(1:nlevsoi)
   real :: vol_liq(1:nlevsoi)
@@ -119,155 +123,126 @@ if(alarmCheck) then
 
    call clm45_drv(n, doalb, nextsw_cday, declinp1, declin, rstwr, nlend, rdate)
 
-!YDT: copy model data to clm45_struc
-  ! CLM-> LIS 
-     clm45_struc(n)%pps = pps 
-     clm45_struc(n)%pef = pef 
-     clm45_struc(n)%pwf = pwf 
-
 ! ----------------------------------------------------------------------
 ! Write global average diagnostics to standard output
 ! ----------------------------------------------------------------------
+
+  udef = LIS_rc%udef 
   write(LIS_logunit, *)'LIS_rc%npatch(n,LIS_rc%lsm_index)=', LIS_rc%npatch(n,LIS_rc%lsm_index)
   do k=1, LIS_rc%npatch(n,LIS_rc%lsm_index)
 
-     ! replace inactive pft values from NaN to Undefined
-     if ( .not. pft%active(k) ) then 
-        clm45_struc(n)%pef%fsa(k) = LIS_rc%udef
-        clm45_struc(n)%pef%eflx_lwrad_net(k) = LIS_rc%udef
-        clm45_struc(n)%pef%eflx_lh_tot(k) = LIS_rc%udef
-        clm45_struc(n)%pef%eflx_sh_tot(k) = LIS_rc%udef
-        clm45_struc(n)%pef%eflx_soil_grnd(k) = LIS_rc%udef
-        clm45_struc(n)%pwf%qflx_evap_tot(k) = LIS_rc%udef
-        clm45_struc(n)%pwf%qflx_evap_veg(k) = LIS_rc%udef
-        clm45_struc(n)%pwf%qflx_tran_veg(k) = LIS_rc%udef
-        clm45_struc(n)%pwf%qflx_sub_snow(k) = LIS_rc%udef
-      end if 
-        call nan2udef(clm45_struc(n)%pef%fsa(k))
-        call nan2udef( clm45_struc(n)%pef%eflx_lwrad_net(k)) 
-        call nan2udef( clm45_struc(n)%pef%eflx_lh_tot(k)) 
-        call nan2udef( clm45_struc(n)%pef%eflx_sh_tot(k)) 
-        call nan2udef( clm45_struc(n)%pef%eflx_soil_grnd(k)) 
-        call nan2udef( clm45_struc(n)%pwf%qflx_evap_tot(k)) 
-        call nan2udef( clm45_struc(n)%pwf%qflx_evap_veg(k)) 
-        call nan2udef( clm45_struc(n)%pwf%qflx_tran_veg(k)) 
-        call nan2udef( clm45_struc(n)%pwf%qflx_sub_snow(k)) 
+      c=pft%column(k) 
+      l=pft%landunit(k) 
+      g=pft%gridcell(k) 
 
-
-     write(LIS_logunit, '(A, I6, A, F10.4, A, F10.4)') 'k=', k, ' pef%fsa(k)=', clm45_struc(n)%pef%fsa(k), &
-           ' pef%eflx_lwrad_net(k)=', clm45_struc(n)%pef%eflx_lwrad_net(k)
+     write(LIS_logunit, '(A, I6, A, F10.4, A, F10.4)') 'k=', k, ' pef%fsa(k)=', pef%fsa(k), &
+           ' pef%eflx_lwrad_net(k)=', pef%eflx_lwrad_net(k)
 
      call LIS_diagnoseSurfaceOutputVar(n, k, LIS_MOC_SWNET, &
-          value=real(clm45_struc(n)%pef%fsa(k)),&
+          value= n2u( pef%fsa(k) ), &
           vlevel=1,unit="W/m2", direction="DN",&
           surface_type=LIS_rc%lsm_index)
-     call LIS_diagnoseSurfaceOutputVar(n, k,LIS_MOC_LWNET,value=&
-          ((-1.0)*real(clm45_struc(n)%pef%eflx_lwrad_net(k))),vlevel=1,unit="W/m2",&
+     call LIS_diagnoseSurfaceOutputVar(n, k,LIS_MOC_LWNET, &
+          value= -1.0 * n2u( pef%eflx_lwrad_net(k) ), vlevel=1,unit="W/m2", &
           direction="DN",surface_type=LIS_rc%lsm_index)
      call LIS_diagnoseSurfaceOutputVar(n, k,LIS_MOC_QLE,&
-          value=real(clm45_struc(n)%pef%eflx_lh_tot(k)),vlevel=1,unit="W/m2",&
+          value= n2u( pef%eflx_lh_tot(k) ) , vlevel=1,unit="W/m2",&
           direction="UP",surface_type=LIS_rc%lsm_index)
      call LIS_diagnoseSurfaceOutputVar(n, k,LIS_MOC_QH,&
-          value=real(clm45_struc(n)%pef%eflx_sh_tot(k)),&
+          value=n2u( pef%eflx_sh_tot(k) ), &
           vlevel=1,unit="W/m2", direction="UP",surface_type=LIS_rc%lsm_index)
      call LIS_diagnoseSurfaceOutputVar(n, k,LIS_MOC_QG,&
-          value=real(clm45_struc(n)%pef%eflx_soil_grnd(k)),vlevel=1,unit="W/m2",&
+          value=n2u( pef%eflx_soil_grnd(k) ), vlevel=1,unit="W/m2",&
           direction="DN",surface_type=LIS_rc%lsm_index)
 
 !Bowen Ratio - sensible/latent
-     if(clm45_struc(n)%pef%eflx_lh_tot(k).gt.0 .and. pft%active(k) ) then
-        call LIS_diagnoseSurfaceOutputVar(n, k,LIS_MOC_BR,&
-          value=real(clm45_struc(n)%pef%eflx_sh_tot(k)/clm45_struc(n)%pef%eflx_lh_tot(k)), &
-          vlevel=1,unit="-", direction="-",surface_type=LIS_rc%lsm_index)
-     else
+     tmp1 = n2u(pef%eflx_lh_tot(k))
+     tmp2 = n2u(pef%eflx_sh_tot(k))
+     if( isudef(tmp1) .or. isudef(tmp2) .or. tmp1 .eq. 0 ) then
         call LIS_diagnoseSurfaceOutputVar(n,k,LIS_MOC_BR,value=0.0,vlevel=1,unit="-",&
              direction="-",surface_type=LIS_rc%lsm_index)
+     else
+        call LIS_diagnoseSurfaceOutputVar(n, k,LIS_MOC_BR,&
+          value= tmp2 / tmp1, &
+          vlevel=1,unit="-", direction="-",surface_type=LIS_rc%lsm_index)
      endif
 
 !Evaporative Fraction
-     if( (clm45_struc(n)%pef%eflx_lh_tot(k) + &
-          clm45_struc(n)%pef%eflx_sh_tot(k) ) .ne. 0  .and. pft%active(k) ) then
-        call LIS_diagnoseSurfaceOutputVar(n, k,LIS_MOC_EF,&
-          value=real(clm45_struc(n)%pef%eflx_lh_tot(k)/(clm45_struc(n)%pef%eflx_lh_tot(k) + &
-          clm45_struc(n)%pef%eflx_sh_tot(k) ) ), vlevel=1,unit="-",&
-          direction="-",surface_type=LIS_rc%lsm_index)
-     else
-!double check
+     
+     tmp1 = n2u( pef%eflx_lh_tot(k) )
+     tmp2 = n2u( pef%eflx_sh_tot(k) )
+     if( isudef(tmp1) .or. isudef(tmp2) .or. tmp1+tmp2 .eq. 0 ) then 
         call LIS_diagnoseSurfaceOutputVar(n,k,LIS_MOC_EF,value=1.0,vlevel=1,unit="-",&
              direction="-",surface_type=LIS_rc%lsm_index)
+     else
+        call LIS_diagnoseSurfaceOutputVar(n, k,LIS_MOC_EF, &
+          value= tmp1 / (tmp1 + tmp2) , vlevel=1,unit="-", &
+          direction="-",surface_type=LIS_rc%lsm_index)
      endif
 
-!gradual fix ---vvvv ---------------
-#if 0
-     !YDT they are on grid now
      call LIS_diagnoseSurfaceOutputVar(n,k,LIS_MOC_TOTALPRECIP,&
-          value=clm45_struc(n)%clm(k)%forc_snow + clm45_struc(n)%clm(k)%forc_rain,&
+          value=n2u( clm_a2l%forc_snow(g) + clm_a2l%forc_rain(g) ), &
           vlevel=1,unit="kg/m2s", direction="DN",surface_type=LIS_rc%lsm_index)
-
-     !these are on grids, not pft 
      call LIS_diagnoseSurfaceOutputVar(n,k,LIS_MOC_TOTALPRECIP,&
-          value=(clm45_struc(n)%clm(k)%forc_snow + &
-          clm45_struc(n)%clm(k)%forc_rain)*LIS_rc%nts(n),&
+          value=n2u( (clm_a2l%forc_snow(g) + clm_a2l%forc_rain(g))*LIS_rc%nts(n) ) ,&
           vlevel=1,unit="kg/m2", direction="DN") ! EMK
      call LIS_diagnoseSurfaceOutputVar(n, k,LIS_MOC_SNOWF,&
-          value=clm45_struc(n)%clm(k)%forc_snow,&
+          value=n2u( clm_a2l%forc_snow(g) ), &
           vlevel=1,unit="kg/m2s", direction="DN",surface_type=LIS_rc%lsm_index)
      call LIS_diagnoseSurfaceOutputVar(n, k,LIS_MOC_RAINF,&
-          value=clm45_struc(n)%clm(k)%forc_rain,&
+          value=n2u( clm_a2l%forc_rain(g) ), &
           vlevel=1,unit="kg/m2s", direction="DN",surface_type=LIS_rc%lsm_index)
-#endif
-!gradual fix ---^^^^^^--------------
 
      call LIS_diagnoseSurfaceOutputVar(n, k,LIS_MOC_EVAP,&
-          value=real(clm45_struc(n)%pwf%qflx_evap_tot(k)),&
+          value=n2u( pwf%qflx_evap_tot(k) ), &
           vlevel=1,unit="kg/m2s", direction="UP",surface_type=LIS_rc%lsm_index)
-
-!gradual fix ---vvvv ---------------
-#if 0
-     !these are on columns, not pft 
+     
      call LIS_diagnoseSurfaceOutputVar(n, k,LIS_MOC_QS,&
-          value=(clm45_struc(n)%clm(k)%qflx_surf+&
-          clm45_struc(n)%clm(k)%qflx_qrgwl), vlevel=1,unit="kg/m2s", direction="OUT",surface_type=LIS_rc%lsm_index)
+          value=n2u( cwf%qflx_surf(c) + cwf%qflx_qrgwl(c) ), &
+          vlevel=1,unit="kg/m2s", direction="OUT",surface_type=LIS_rc%lsm_index)
 
      call LIS_diagnoseSurfaceOutputVar(n, k,LIS_MOC_QS,&
-          value=(clm45_struc(n)%clm(k)%qflx_surf+&
-          clm45_struc(n)%clm(k)%qflx_qrgwl)*LIS_rc%nts(n), &
+          value=n2u( (cwf%qflx_surf(c)+ cwf%qflx_qrgwl(c) ) * LIS_rc%nts(n) ), &
           vlevel=1,unit="kg/m2", direction="OUT",surface_type=LIS_rc%lsm_index) ! EMK
      call LIS_diagnoseSurfaceOutputVar(n, k,LIS_MOC_QSB,&
-          value=clm45_struc(n)%clm(k)%qflx_drain,&
+          value=n2u( cwf%qflx_drain(c) ) ,&
           vlevel=1,unit="kg/m2s", direction="OUT",surface_type=LIS_rc%lsm_index)
 
      call LIS_diagnoseSurfaceOutputVar(n, k,LIS_MOC_QSB,&
-          value=clm45_struc(n)%clm(k)%qflx_drain*LIS_rc%nts(n),&
+          value=n2u( cwf%qflx_drain(c) * LIS_rc%nts(n) ), &
           vlevel=1,unit="kg/m2", direction="OUT",surface_type=LIS_rc%lsm_index) ! EMK
      call LIS_diagnoseSurfaceOutputVar(n, k,LIS_MOC_QSM,&
-          value=clm45_struc(n)%clm(k)%qflx_snomelt,&
+          value=n2u( cwf%qflx_snomelt(c) ), &
           vlevel=1,unit="kg/m2s", direction="S2L",surface_type=LIS_rc%lsm_index)
 
      call LIS_diagnoseSurfaceOutputVar(n, k,LIS_MOC_QSM,&
-          value=clm45_struc(n)%clm(k)%qflx_snomelt*LIS_rc%nts(n),&
+          value=n2u( cwf%qflx_snomelt(c) * LIS_rc%nts(n) ), &
           vlevel=1,unit="kg/m2", direction="S2L",surface_type=LIS_rc%lsm_index) ! EMK
 
      soimtc = 0.0
      soilmr = 0.0
      roottemp = 0.0
 
+!gradual fix ---vvvv ---------------
+#if 0
+!YDT needs to check soil layers in CLM45 
+
      do m=1,nlevsoi
-        vol_ice(m) = min(clm45_struc(n)%clm(k)%watsat(m),&
-             clm45_struc(n)%clm(k)%h2osoi_ice(m)/&
-             (clm45_struc(n)%clm(k)%dz(m)*denice))
-        eff_porosity(m) = clm45_struc(n)%clm(k)%watsat(m)-vol_ice(m)
+        vol_ice(m) = min(cps%watsat(c, m),&
+             cws%h2osoi_ice(m)/&
+             (XXX%dz(m)*denice))
+        eff_porosity(m) = XXX%watsat(m)-vol_ice(m)
         vol_liq(m) = min(eff_porosity(m), &
-             clm45_struc(n)%clm(k)%h2osoi_liq(m)/&
-             (clm45_struc(n)%clm(k)%dz(m)*denh2o))
+             XXX%h2osoi_liq(m)/&
+             (XXX%dz(m)*denh2o))
         call LIS_diagnoseSurfaceOutputVar(n,k,LIS_MOC_SOILMOIST,&
              value=(vol_liq(m)+vol_ice(m)),&
              vlevel = m, unit="m3/m3", direction="-",surface_type=LIS_rc%lsm_index)
         soimtc = soimtc + vol_liq(m)+vol_ice(m)
-        if(clm45_struc(n)%clm(k)%lakpoi) then
-           tempvar = clm45_struc(n)%clm(k)%t_lake(m)
+        if(XXX%lakpoi) then
+           tempvar = XXX%t_lake(m)
         else
-           tempvar = clm45_struc(n)%clm(k)%t_soisno(m)
+           tempvar = XXX%t_soisno(m)
         endif
         call LIS_diagnoseSurfaceOutputVar(n,k,LIS_MOC_SOILTEMP, value=tempvar, &
              vlevel=m, unit="K",direction="-",surface_type=LIS_rc%lsm_index)
@@ -276,7 +251,7 @@ if(alarmCheck) then
            if(m.eq.8) then
               soilmr = soilmr +(vol_liq(m)+vol_ice(m))*0.17110706
            else
-              soilmr=soilmr + (vol_liq(m)+vol_ice(m))*clm45_struc(n)%clm(k)%dz(m)
+              soilmr=soilmr + (vol_liq(m)+vol_ice(m))*XXX%dz(m)
            endif
         endif
 
@@ -284,7 +259,7 @@ if(alarmCheck) then
            if(m.eq.8) then
               roottemp = roottemp + tempvar*0.17110706
            else
-              roottemp=roottemp + tempvar*clm45_struc(n)%clm(k)%dz(m)
+              roottemp=roottemp + tempvar*XXX%dz(m)
            endif
         endif
      enddo
@@ -298,20 +273,20 @@ if(alarmCheck) then
           unit="K",direction="-",surface_type=LIS_rc%lsm_index)
 
      call LIS_diagnoseSurfaceOutputVar(n,k,LIS_MOC_DELSOILMOIST, value=&
-          clm45_struc(n)%clm(k)%soilmtc_prev-soimtc, vlevel=1, unit="kg/m2",&
+          XXX%soilmtc_prev-soimtc, vlevel=1, unit="kg/m2",&
           direction="INC",surface_type=LIS_rc%lsm_index)
 
      snowtemp = 0
-     if (clm45_struc(n)%clm(k)%itypwat/=istwet)then
-        if(clm45_struc(n)%clm(k)%snl < 0)then
+     if (XXX%itypwat/=istwet)then
+        if(XXX%snl < 0)then
            totaldepth=0.
-           do i=clm45_struc(n)%clm(k)%snl+1,0    ! Compute total depth of snow layers
-              totaldepth=totaldepth+clm45_struc(n)%clm(k)%dz(i)
+           do i=XXX%snl+1,0    ! Compute total depth of snow layers
+              totaldepth=totaldepth+XXX%dz(i)
            enddo
 
-           do i=clm45_struc(n)%clm(k)%snl+1,0    ! Compute snow temperature
+           do i=XXX%snl+1,0    ! Compute snow temperature
               snowtemp=snowtemp+&
-                   (clm45_struc(n)%clm(k)%t_soisno(i)*clm45_struc(n)%clm(k)%dz(i))
+                   (XXX%t_soisno(i)*XXX%dz(i))
            enddo
            snowtemp=snowtemp/totaldepth
         endif
@@ -320,10 +295,10 @@ if(alarmCheck) then
      call LIS_diagnoseSurfaceOutputVar(n, k, LIS_MOC_SNOWT, &
           value=snowtemp, vlevel=1,unit="K",direction="-",surface_type=LIS_rc%lsm_index)
      call LIS_diagnoseSurfaceOutputVar(n, k, LIS_MOC_VEGT, &
-          value=clm45_struc(n)%clm(k)%t_veg,&
+          value=XXX%t_veg,&
           vlevel=1,unit="K",direction="-",surface_type=LIS_rc%lsm_index)
      call LIS_diagnoseSurfaceOutputVar(n, k, LIS_MOC_BARESOILT, &
-          value=clm45_struc(n)%clm(k)%t_grnd,&
+          value=XXX%t_grnd,&
           vlevel=1,unit="K",direction="-",surface_type=LIS_rc%lsm_index)
 
 !----------------------------------------------------------------------
@@ -331,26 +306,26 @@ if(alarmCheck) then
 ! the snow temperature, bare soil temperature and canopy temperature
 !----------------------------------------------------------------------
      snowt=0.
-     if (clm45_struc(n)%clm(k)%itypwat/=istwet)then
-        if(clm45_struc(n)%clm(k)%snl < 0)then
-           snowt =clm45_struc(n)%clm(k)%t_soisno(clm45_struc(n)%clm(k)%snl+1)
+     if (XXX%itypwat/=istwet)then
+        if(XXX%snl < 0)then
+           snowt =XXX%t_soisno(XXX%snl+1)
         endif
      endif
      if(snowt ==0.)snowt =LIS_rc%udef
      if(snowt.ne.LIS_rc%udef)then
-        asurf=clm45_struc(n)%clm(k)%frac_sno*snowt+ &
-             clm45_struc(n)%clm(k)%frac_veg_nosno*clm45_struc(n)%clm(k)%t_veg+  &
-             (1-(clm45_struc(n)%clm(k)%frac_sno+clm45_struc(n)%clm(k)%frac_veg_nosno))* &
-             clm45_struc(n)%clm(k)%t_grnd
+        asurf=XXX%frac_sno*snowt+ &
+             XXX%frac_veg_nosno*XXX%t_veg+  &
+             (1-(XXX%frac_sno+XXX%frac_veg_nosno))* &
+             XXX%t_grnd
      else
-        asurf=clm45_struc(n)%clm(k)%frac_veg_nosno*clm45_struc(n)%clm(k)%t_veg+ &
-             (1-clm45_struc(n)%clm(k)%frac_veg_nosno)*clm45_struc(n)%clm(k)%t_grnd
+        asurf=XXX%frac_veg_nosno*XXX%t_veg+ &
+             (1-XXX%frac_veg_nosno)*XXX%t_grnd
      endif
 
      call LIS_diagnoseSurfaceOutputVar(n, k,LIS_MOC_AVGSURFT, &
           value=asurf,vlevel=1,unit="K",direction="-",surface_type=LIS_rc%lsm_index)
      call LIS_diagnoseSurfaceOutputVar(n, k,LIS_MOC_RADT, &
-          value=clm45_struc(n)%clm(k)%t_rad,&
+          value=XXX%t_rad,&
           vlevel=1,unit="K",direction="-",surface_type=LIS_rc%lsm_index)
 
 #endif
@@ -361,65 +336,58 @@ if(alarmCheck) then
 #if 0
 !now surfalb is not defined. got direct and diffusive alb: albd albi
      call LIS_diagnoseSurfaceOutputVar(n, k,LIS_MOC_ALBEDO, &
-          value=clm45_struc(n)%clm(k)%surfalb,&
+          value=XXX%surfalb,&
           vlevel=1,unit="-",direction="-",surface_type=LIS_rc%lsm_index)
 #endif
 !gradual fix ---^^^^^^--------------
 
-     if (isnan( clm45_struc(n)%pwf%qflx_evap_veg(k)) ) clm45_struc(n)%pwf%qflx_evap_veg(k) = LIS_rc%udef
-     if (isnan( clm45_struc(n)%pwf%qflx_tran_veg(k)) ) clm45_struc(n)%pwf%qflx_tran_veg(k) = LIS_rc%udef
-     if (isnan( clm45_struc(n)%pwf%qflx_sub_snow(k)) ) clm45_struc(n)%pwf%qflx_sub_snow(k) = LIS_rc%udef
-
-     if ( pft%active(k) ) then 
-      ! write(LIS_logunit, '(A, I6, A, F10.4, A, F10.4)') 'k=', k, 'qflx_evap_veg(k) =', &
-      !    clm45_struc(n)%pwf%qflx_evap_veg(k), ' qflx_tran_veg(k)=', clm45_struc(n)%pwf%qflx_tran_veg(k)
-
-       call LIS_diagnoseSurfaceOutputVar(n, k,LIS_MOC_ECANOP, value=&
-          real(clm45_struc(n)%pwf%qflx_evap_veg(k)-clm45_struc(n)%pwf%qflx_tran_veg(k)),&
+     tmp1 = n2u( pwf%qflx_evap_veg(k) ) 
+     tmp2 = n2u( pwf%qflx_tran_veg(k) ) 
+     if ( isudef(tmp1) .or. isudef(tmp2) ) then   
+       call LIS_diagnoseSurfaceOutputVar(n, k,LIS_MOC_ECANOP, value= LIS_rc%udef, &
           vlevel=1,unit="kg/m2s",direction="UP",surface_type=LIS_rc%lsm_index)
      else 
        call LIS_diagnoseSurfaceOutputVar(n, k,LIS_MOC_ECANOP, value=&
-          LIS_rc%udef, &
+          n2u( pwf%qflx_evap_veg(k) -  pwf%qflx_tran_veg(k) ),&
           vlevel=1,unit="kg/m2s",direction="UP",surface_type=LIS_rc%lsm_index)
      end if 
 
      call LIS_diagnoseSurfaceOutputVar(n, k,LIS_MOC_TVEG, value=&
-          real(clm45_struc(n)%pwf%qflx_tran_veg(k)),vlevel=1,unit="kg/m2s",&
+          n2u( pwf%qflx_tran_veg(k)),vlevel=1,unit="kg/m2s",&
           direction="UP",surface_type=LIS_rc%lsm_index)
      call LIS_diagnoseSurfaceOutputVar(n, k,LIS_MOC_ESOIL, value=&
-          real(clm45_struc(n)%pwf%qflx_evap_veg(k)),vlevel=1,unit="kg/m2s",&
+          n2u( pwf%qflx_evap_veg(k)),vlevel=1,unit="kg/m2s",&
           direction="UP",surface_type=LIS_rc%lsm_index)
      call LIS_diagnoseSurfaceOutputVar(n, k,LIS_MOC_SUBSNOW, value=&
-          real(clm45_struc(n)%pwf%qflx_sub_snow(k)), vlevel=1,unit="kg/m2s",&
+          n2u( pwf%qflx_sub_snow(k)), vlevel=1,unit="kg/m2s",&
           direction="-",surface_type=LIS_rc%lsm_index)
-
 
 !gradual fix ---vvvv ---------------
 #if 0
 !YDT: in cws, cwf, or cps
      call LIS_diagnoseSurfaceOutputVar(n, k,LIS_MOC_SWE, &
-          value=clm45_struc(n)%clm(k)%h2osno,&
+          value=XXX%h2osno,&
           vlevel=1,unit="kg/m2",direction="-",surface_type=LIS_rc%lsm_index)
      call LIS_diagnoseSurfaceOutputVar(n, k,LIS_MOC_SWE, &
-          value=clm45_struc(n)%clm(k)%h2osno/LIS_CONST_RHOFW,&
+          value=XXX%h2osno/LIS_CONST_RHOFW,&
           vlevel=1,unit="m",direction="-",surface_type=LIS_rc%lsm_index)
      call LIS_diagnoseSurfaceOutputVar(n, k,LIS_MOC_SNOWDEPTH, &
-          value=clm45_struc(n)%clm(k)%snowdp,&
+          value=XXX%snowdp,&
           vlevel=1,unit="m",direction="-",surface_type=LIS_rc%lsm_index)
      call LIS_diagnoseSurfaceOutputVar(n, k,LIS_MOC_SNOWCOVER, vlevel=1,unit="-",&
-          value=clm45_struc(n)%clm(k)%frac_sno,direction="-",&
+          value=XXX%frac_sno,direction="-",&
           surface_type=LIS_rc%lsm_index)
      call LIS_diagnoseSurfaceOutputVar(n, k,LIS_MOC_CANOPINT, value=&
-          clm45_struc(n)%clm(k)%h2ocan,vlevel=1,unit="kg/m2",&
+          XXX%h2ocan,vlevel=1,unit="kg/m2",&
           direction="-",surface_type=LIS_rc%lsm_index)
      call LIS_diagnoseSurfaceOutputVar(n, k,LIS_MOC_DELSWE,vlevel=1,unit="kg/m2",value=&
-          clm45_struc(n)%clm(k)%h2osno-clm45_struc(n)%clm(k)%h2osno_prev,&
+          XXX%h2osno-XXX%h2osno_prev,&
           direction="INC",surface_type=LIS_rc%lsm_index)
 #endif
 !gradual fix ---^^^^^^--------------
 !YDT acond undefined now 
 !     call LIS_diagnoseSurfaceOutputVar(n, k, LIS_MOC_ACOND,&
-!          value=clm45_struc(n)%clm(k)%acond,&
+!          value=XXX%acond,&
 !          vlevel=1,unit="m/s",direction="-",surface_type=LIS_rc%lsm_index)
   enddo
 
@@ -447,18 +415,6 @@ if(alarmCheck) then
      enddo
   endif
 
-  do k=1,LIS_rc%npatch(n,LIS_rc%lsm_index)
-     clm45_struc(n)%clm(k)%forc_t = 0
-     clm45_struc(n)%clm(k)%forc_q  = 0
-     clm45_struc(n)%clm(k)%forc_solad = 0
-     clm45_struc(n)%clm(k)%forc_solai = 0
-     clm45_struc(n)%clm(k)%forc_lwrad = 0
-     clm45_struc(n)%clm(k)%forc_u     = 0
-     clm45_struc(n)%clm(k)%forc_v     = 0
-     clm45_struc(n)%clm(k)%forc_pbot  = 0
-     clm45_struc(n)%clm(k)%forc_rain  = 0
-     clm45_struc(n)%clm(k)%forc_snow  = 0
-  enddo
   clm45_struc(n)%forc_count = 0
 #endif
 !gradual fix ---^^^^^^--------------
@@ -467,13 +423,37 @@ endif   ! --- end of  if(alarmCheck) then
 return
 end subroutine clm45_main
 
-subroutine nan2udef(x) 
+
+! Fucntion to change NaNs into LIS undefs. Convert double to single precision  
+ function n2u(x) result (ans) 
 
   use LIS_coreMod, only : LIS_rc
 
-   real*8, intent(inout) :: x 
-    
-  if (isnan(x) ) x=LIS_rc%udef 
+   real*8, intent(in) :: x 
+   real :: ans 
+   
+   if (isnan(x) ) then 
+        ans=LIS_rc%udef 
+   else 
+        ans = real(x)   
+   end if 
 
-end subroutine nan2udef
+   return 
+ end function n2u
+
+
+! Fucntion to check if a real is undef 
+ function isudef(x) result (ans)
+
+  use LIS_coreMod, only : LIS_rc
+
+   real, intent(in) :: x
+   logical :: ans
+
+   ans=.false.
+   if ( x .eq. LIS_rc%udef ) ans=.true. 
+
+   return
+ end function isudef 
+
 

@@ -159,10 +159,6 @@ subroutine clm45_f2t(n)
        pps%htop(p) = 15.0     ! canopy top (m)
    End Do 
 
-   !copy 
-   !clm45_struc(n)%pps = pps
-
-
    Do c = begc, endc
      cps%z0mg(c) = 5.0          !roughness length over ground, momentum
    End do 
@@ -178,53 +174,44 @@ subroutine clm45_f2t(n)
 
 
      if(LIS_FORC_Tair%selectOpt.eq.1) then
-       !clm45_struc(n)%clm_a2l%forc_t(g)=tmp(g)
        clm_a2l%forc_t(g)=tmp(g)
        clm_a2l%forc_th(g)=tmp(g)  !YDT temp fix 
      endif
      if(LIS_FORC_Qair%selectOpt.eq.1) then
-       !clm45_struc(n)%clm_a2l%forc_q(g)=q2(g)
        clm_a2l%forc_q(g)=q2(g)
      endif
      if(LIS_FORC_SWdown%selectOpt.eq.1) then
-       !clm45_struc(n)%clm_a2l%forc_solar(g)=swd(g)
        clm_a2l%forc_solar(g)=swd(g)
      endif
      if(LIS_FORC_LWdown%selectOpt.eq.1) then
-       !clm45_struc(n)%clm_a2l%forc_lwrad(g)=lwd(g)
        clm_a2l%forc_lwrad(g)=lwd(g)
      endif
      if(LIS_FORC_Wind_E%selectOpt.eq.1) then
-       !clm45_struc(n)%clm_a2l%forc_u(g)=uwind(g)
        clm_a2l%forc_u(g)=uwind(g)
      endif
      if(LIS_FORC_Wind_N%selectOpt.eq.1) then
-       !clm45_struc(n)%clm_a2l%forc_v(g)=vwind(g)
        clm_a2l%forc_v(g)=vwind(g)
      endif
      if(LIS_FORC_Psurf%selectOpt.eq.1) then
-       !clm45_struc(n)%clm_a2l%forc_pbot(g)=psurf(g)
        clm_a2l%forc_pbot(g)=psurf(g)
      endif
      if(pcp(g).ne.LIS_rc%udef) then
-        !clm45_struc(n)%clm_a2l%rainf(g)=pcp(g)
         clm_a2l%rainf(g)=pcp(g)
      else
-        !clm45_struc(n)%clm_a2l%rainf(g)=0.0
         clm_a2l%rainf(g)=0.0
      endif
 !     if(LIS_FORC_CRainf%selectOpt.eq.1) then 
 !        if(cpcp(g).ne.LIS_rc%udef) then 
-!           clm45_struc(n)%clm_a2l%rainf_c=cpcp(g)
+!           clm_a2l%rainf_c=cpcp(g)
 !        else
-!           clm45_struc(n)%clm_a2l%rainf_c=0.0
+!           clm_a2l%rainf_c=0.0
 !        endif
 !     endif
 !     if(LIS_FORC_Snowf%selectOpt.eq.1) then 
 !        if(snowf(g).ne.LIS_rc%udef) then
-!           clm45_struc(n)%clm_a2l%snowf=snowf(g)
+!           clm_a2l%snowf=snowf(g)
 !        else
-!           clm45_struc(n)%clm_a2l%snowf=0.0
+!           clm_a2l%snowf=0.0
 !        endif
 !     endif
   enddo

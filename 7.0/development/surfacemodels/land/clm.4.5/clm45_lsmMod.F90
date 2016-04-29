@@ -117,92 +117,6 @@ module clm45_lsmMod
      integer                    :: numout
      real                       :: ts
      real                       :: rstInterval
-! CLM4.5 native types
-! extracted from  ~/CESM/cesm1_2_2_dev/models/lnd/clm/src/clm4_5/main/clmtype.F90 
-type(pft_pstate_type) :: pps      !physical state variables
-type(pft_eflux_type)  :: pef         !pft energy flux
-type(pft_wflux_type)  :: pwf         !pft water flux
-
-! ----------->>>>> -------not turned on yet -- can these be kept without initialized? 
-#if 0 
-type(energy_balance_type)   :: pebal !energy balance structure
-type(energy_balance_type)   :: cebal !energy balance structure
-type(water_balance_type)    :: pwbal !water balance structure
-type(water_balance_type)    :: cwbal !water balance structure
-type(carbon_balance_type)   :: pcbal !carbon balance structure
-type(carbon_balance_type)   :: ccbal !carbon balance structure
-type(nitrogen_balance_type) :: pnbal !nitrogen balance structure
-type(nitrogen_balance_type) :: cnbal !nitrogen balance structure
-type(pft_pstate_type) :: pps_a    !pft-level pstate variables averaged to the column
-type(pft_psynstate_type)::ppsyns     !photosynthesis relevant variables
-type(pft_epc_type)  :: pftcon
-type(decomp_cascade_type) :: decomp_cascade_con
-type(pft_dgvepc_type) :: dgv_pftcon
-type(pft_epv_type)    :: pepv        !pft ecophysiological variables
-type(pft_estate_type) :: pes      !pft energy state
-type(pft_wstate_type) :: pws         !pft water state
-type(pft_cstate_type)  :: pcs         !pft carbon state
-type(pft_cstate_type) :: pcs_a       !pft-level carbon state averaged to the column
-type(pft_cstate_type) :: pc13s       !pft carbon-13 state
-type(pft_cstate_type) :: pc13s_a     !pft carbon-13 state averaged to the column
-type(pft_cstate_type) :: pc14s       !pft carbon-14 state
-type(pft_cstate_type) :: pc14s_a     !pft carbon-14 state averaged to the column
-type(pft_nstate_type) :: pns      !pft nitrogen state
-type(pft_nstate_type) :: pns_a    !pft-level nitrogen state variables averaged to the column
-type(pft_vstate_type) :: pvs         !pft VOC state
-type(pft_dgvstate_type) :: pdgvs     !pft DGVM state variables
-type(pft_mflux_type)  :: pmf         !pft momentum flux
-type(pft_cflux_type)  :: pcf      !pft carbon flux
-type(pft_cflux_type) :: pcf_a    !pft carbon flux averaged to the column
-type(pft_cflux_type) :: pc13f    !pft carbon-13 flux
-type(pft_cflux_type) :: pc13f_a  !pft carbon-13 flux averaged to the column
-type(pft_cflux_type) :: pc14f    !pft carbon-14 flux
-type(pft_cflux_type) :: pc14f_a  !pft carbon-14 flux averaged to the column
-type(pft_nflux_type)  :: pnf       !pft nitrogen flux
-type(pft_nflux_type)  :: pnf_a     !pft-level nitrogen flux variables averaged to the column
-type(pft_vflux_type)  :: pvf         !pft VOC flux
-type(pft_depvd_type)  :: pdd         !dry dep velocity
-type(pft_dflux_type)  :: pdf         !pft dust flux
-type(column_pstate_type) :: cps      !column physical state variables
-type(column_estate_type) :: ces      !column energy state
-type(column_wstate_type) :: cws      !column water state
-type(pft_wstate_type)    :: pws_a    !pft-level water state variables averaged to the column
-type(column_cstate_type) :: ccs      !column carbon state
-type(column_cstate_type) :: cc13s    !column carbon-13 state
-type(column_cstate_type) :: cc14s    !column carbon-14 state
-type(column_ch4_type)   :: cch4      !column CH4 variables
-type(column_nstate_type) :: cns      !column nitrogen state
-type(column_nstate_type) :: cns_a    !column-level nitrogen state variables averaged to gridcell
-type(column_eflux_type) :: cef       ! column energy flux
-type(pft_eflux_type)    :: pef_a     ! pft-level energy flux variables averaged to the column
-type(column_wflux_type) :: cwf       ! column water flux
-type(pft_wflux_type)    :: pwf_a     ! pft-level water flux variables averaged to the column
-type(column_cflux_type) :: ccf    ! column carbon flux
-type(column_cflux_type) :: cc13f  ! column carbon-13 flux
-type(column_cflux_type) :: cc14f  ! column carbon-14 flux
-type(column_nflux_type) :: cnf       !column nitrogen flux
-type(landunit_pstate_type) :: lps     !land unit physical state variables
-type(column_pstate_type)   :: cps_a   !column-level physical state variables averaged to landunit
-type(landunit_eflux_type) :: lef     ! average of energy fluxes all columns
-type(column_eflux_type)   :: cef_a   ! column-level energy flux variables averaged to landunit
-type(gridcell_estate_type) :: ges    !average of energy states all landunits
-type(gridcell_wstate_type) :: gws    !average of water states all landunits
-type(gridcell_ch4_type)   :: gch4    !average of CH4 fluxes all landunits
-type(column_vstate_type):: cvs_a            !column-level VOC state variables averaged to gridcell
-type(gridcell_efstate_type):: gve       !gridcell VOC emission factors
-type(gridcell_dgvstate_type):: gdgvs !gridcell DGVM structure
-type(gridcell_eflux_type) :: gef     !average of energy fluxes all landunits
-type(gridcell_wflux_type) :: gwf     !average of water fluxes all landunits
-type(pft_type) :: pft  !plant functional type (pft) data structure
-type(column_type) :: col !column data structure (soil/snow/canopy columns)
-type(landunit_type) :: lun  !geomorphological landunits
-type(gridcell_type) :: grc    !gridcell data structure
-
-!forcing, 
-type(atm2lnd_type) :: clm_a2l      ! a2l fields on clm grid
-
-#endif  
-! -----------<<<<<<<<<<<<-not turned on yet -- can these be kept without initialized? 
   end type clm45_type_dec
 
   type(clm45_type_dec), allocatable :: clm45_struc(:)   ! nnest copies 
@@ -419,13 +333,6 @@ contains
      call decompInit_glcp (n, ni*nj, ni, nj)
 
      call initClmtype()
-
-      !initialize a copy of the variables for LIS to access
-      !YDT 
-      call init_pft_pstate_type(begp, endp, clm45_struc(n)%pps) 
-      call init_pft_eflux_type(begp, endp, clm45_struc(n)%pef) 
-      call init_pft_wflux_type(begp, endp, clm45_struc(n)%pwf) 
-
 
      call init_atm2lnd_type(begg, endg, clm_a2l)
      call init_lnd2atm_type(begg, endg, clm_l2a)  ! should not be needed 
