@@ -23,7 +23,9 @@ subroutine clm45_f2t(n)
   use LIS_coreMod,        only : LIS_rc, LIS_surface
   use LIS_metforcingMod, only : LIS_FORC_State
   use LIS_FORC_AttributesMod 
-  use LIS_logMod,         only : LIS_verify, LIS_logunit
+  use LIS_logMod,         only : LIS_verify, LIS_logunit,  &
+                                 LIS_getNextUnitNumber, LIS_releaseUnitNumber
+  use LIS_historyMod
   use clmtype
   use clm45_lsmMod
   use clm_atmlnd, only    : clm_a2l
@@ -44,13 +46,19 @@ subroutine clm45_f2t(n)
 !  \end{description}
 !EOP
 
-  integer            :: t,tid,status, g, c, p, begg, endg, begl, endl, begc, endc, begp, endp
+  integer            :: ftn 
+  logical :: isudef
+  real :: n2u 
+  integer            :: t,tid,status, g, l, c, p, begg, endg, begl, endl, begc, endc, begp, endp
   type(ESMF_Field)   :: tmpField,q2Field,uField,vField,swdField,lwdField
   type(ESMF_Field)   :: psurfField,pcpField,cpcpField,snowfField
   real,pointer       :: tmp(:),q2(:),uwind(:),vwind(:),snowf(:)
   real,pointer       :: swd(:),lwd(:),psurf(:),pcp(:),cpcp(:)
 
+ !tmp tile-space variable
+  real, allocatable :: tile_var(:)
 
+  !YDT Note: all the returned variables in ESMF_FieldGet are in tile space 
   if(LIS_FORC_Tair%selectOpt.eq.1) then
     call ESMF_StateGet(LIS_FORC_State(n),trim(LIS_FORC_Tair%varname(1)),tmpField,&
          rc=status)
@@ -141,29 +149,28 @@ subroutine clm45_f2t(n)
      call LIS_verify(status)
   endif
 
-
-! 1-d grid space, begg - endg 
-!YDT  do t=1,LIS_rc%npatch(n,LIS_rc%lsm_index)
-!YDT     g=LIS_surface(n,LIS_rc%lsm_index)%tile(t)%tile_id  ! to be changed to grid id 
-
    call get_proc_bounds(begg, endg, begl, endl, begc, endc, begp, endp)
-
    write(LIS_logunit, *)'clm45_f2t: begg, endg, begl, endl, begc, endc, begp, endp'
    write(LIS_logunit, '(8I7)') begg, endg, begl, endl, begc, endc, begp, endp
    write(LIS_logunit, *)'-------------------end ----------------------------------'
+
+! Stuff data to  1-d grid space, begg - endg, from tile space
+!  do t=1,LIS_rc%npatch(n,LIS_rc%lsm_index)
+!     g=LIS_surface(n,LIS_rc%lsm_index)%tile(t)%tile_id  
+
+  do p= begp, endp 
+
+      c=pft%column(p)
+      l=pft%landunit(p)
+      g=pft%gridcell(p)
+
    !YDT: 4/13/16: temp fix: where to get these numbers now?
-   Do p = begp, endp
        pps%displa(p) = 5.  ! displacement height (m)
        pps%z0mv(p) = 12.      !roughness length over vegetation, momentum [m]
        pps%z0m(p) = 10.      !roughness length over vegetation, momentum [m]
        pps%htop(p) = 15.0     ! canopy top (m)
-   End Do 
 
-   Do c = begc, endc
      cps%z0mg(c) = 5.0          !roughness length over ground, momentum
-   End do 
-
-   Do g = begg, endg
 
    !YDT: 4/13/16: temp fix: where to get these numbers now?
       clm_a2l%forc_hgt_t(g) = 30.0 
@@ -174,46 +181,73 @@ subroutine clm45_f2t(n)
 
 
      if(LIS_FORC_Tair%selectOpt.eq.1) then
-       clm_a2l%forc_t(g)=tmp(g)
-       clm_a2l%forc_th(g)=tmp(g)  !YDT temp fix 
+       clm_a2l%forc_t(g)=tmp(p)
+       clm_a2l%forc_th(g)=tmp(p)  !YDT temp fix 
+     else ! what values to take?  
+       clm_a2l%forc_t(g)=0.
+       clm_a2l%forc_th(g)=0.
      endif
      if(LIS_FORC_Qair%selectOpt.eq.1) then
-       clm_a2l%forc_q(g)=q2(g)
+       clm_a2l%forc_q(g)=q2(p)
+     else 
+       clm_a2l%forc_q(g)=0. 
      endif
      if(LIS_FORC_SWdown%selectOpt.eq.1) then
-       clm_a2l%forc_solar(g)=swd(g)
+       clm_a2l%forc_solar(g)=swd(p)
+     else
+       clm_a2l%forc_solar(g)=0. 
      endif
      if(LIS_FORC_LWdown%selectOpt.eq.1) then
-       clm_a2l%forc_lwrad(g)=lwd(g)
+       clm_a2l%forc_lwrad(g)=lwd(p)
+     else 
+       clm_a2l%forc_lwrad(g)=0. 
      endif
      if(LIS_FORC_Wind_E%selectOpt.eq.1) then
-       clm_a2l%forc_u(g)=uwind(g)
+       clm_a2l%forc_u(g)=uwind(p)
+     else 
+       clm_a2l%forc_u(g)=0.
      endif
      if(LIS_FORC_Wind_N%selectOpt.eq.1) then
-       clm_a2l%forc_v(g)=vwind(g)
+       clm_a2l%forc_v(g)=vwind(p)
+     else 
+       clm_a2l%forc_v(g)=0. 
      endif
      if(LIS_FORC_Psurf%selectOpt.eq.1) then
-       clm_a2l%forc_pbot(g)=psurf(g)
+       clm_a2l%forc_pbot(g)=psurf(p)
+     else 
+       clm_a2l%forc_pbot(g)=0.
      endif
      if(pcp(g).ne.LIS_rc%udef) then
-        clm_a2l%rainf(g)=pcp(g)
+        clm_a2l%rainf(g)=pcp(p)
      else
         clm_a2l%rainf(g)=0.0
      endif
 !     if(LIS_FORC_CRainf%selectOpt.eq.1) then 
 !        if(cpcp(g).ne.LIS_rc%udef) then 
-!           clm_a2l%rainf_c=cpcp(g)
+!           clm_a2l%rainf_c=cpcp(p)
 !        else
 !           clm_a2l%rainf_c=0.0
 !        endif
 !     endif
 !     if(LIS_FORC_Snowf%selectOpt.eq.1) then 
 !        if(snowf(g).ne.LIS_rc%udef) then
-!           clm_a2l%snowf=snowf(g)
+!           clm_a2l%snowf=snowf(p)
 !        else
 !           clm_a2l%snowf=0.0
 !        endif
 !     endif
-  enddo
+
+ enddo  ! p 
+
+  allocate(tile_var( LIS_rc%npatch(n,LIS_rc%lsm_index)) )
+  Do t=1, LIS_rc%npatch(n,LIS_rc%lsm_index)
+     g=pft%gridcell(t)
+     tile_var(t) = n2u( clm_a2l%forc_solar(g) )
+  End Do 
+  ftn = LIS_getNextUnitNumber()
+  open(ftn, file="forc_solar.1gdr4", access="sequential", form="unformatted") 
+  call LIS_writevar_bin(ftn, n, tile_var ) 
+  call LIS_releaseUnitNumber(ftn)
+  deallocate(tile_var) 
 
 end subroutine clm45_f2t
