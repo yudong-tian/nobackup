@@ -1,4 +1,24 @@
 
+7/15/2016:
+  Kristi helped with the ldt.config file in 
+/discover/nobackup/ytian/7.0/test-gdas/development/run-noah36-1-deg
+
+and now the parameters on 1.25x0.942 grid all looked fine. 
+
+Then ran LIS under /home/ytian/7.0-development/test-gdas/development/run-noah36-1-deg
+and now all the forcing variables look OK. 
+
+
+7/13/2016: 
+   Trying the newest version of LDT for the 1.25x0.942 grid: 
+
+/home/ytian/LDT-7.0/development/
+
+~/7.0-development/test-gdas/development/run-noah36-1-deg$ /home/ytian/LDT-7.0/development/LDT ldt.config-1.25
+
+and same problem with the previous version /home/ytian/LDT-7.0/LDT_public_release_7.1rp1. 
+
+
 7/12/2016: 
 
  It seems the CLM4.5 benchmark resolution of 1.25x0.942 is causing problems with 
@@ -14,6 +34,12 @@ and set up a 1.25x0.942 global (60S - 90N) run under:
 Results: LIS ran. But the results are not on the global domain -- they are on the South America continent
 projected to the global domain. 
 
+Problem figured out: in ldt.config-1.25, 
+      Landmask spatial transform:      none                   # none | mode | neighbor
+should be changed to 
+      Landmask spatial transform:      mode                   # none | mode | neighbor
+
+But this change only fixed the problem with landmask. Other parameters are still on S. America. 
 
 
 6/20/2016
