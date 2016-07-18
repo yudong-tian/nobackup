@@ -1,0 +1,31 @@
+
+[1] MPDI-based 10V= 1.184
+[1] MPDI-based 19V= 1.225
+[1] MPDI-based 37V= 1.409
+[1] MPDI-based 89V= 2.876
+[1] ""
+[1] MPDI-based 10H= 1.134
+[1] MPDI-based 19H= 1.325
+[1] MPDI-based 37H= 1.69
+[1] MPDI-based 89H= 3.2
+
+[1] 10H-based 10V= 0.708
+[1] 10H-based 19V= 0.895
+[1] 10H-based 37V= 1.248
+[1] 10H-based 89V= 2.975
+[1] ""
+[1] 10H-based 10H= 0
+[1] 10H-based 19H= 0.798
+[1] 10H-based 37H= 1.494
+[1] 10H-based 89H= 3.294
+
+[1] TELSEM 10V= 1.828
+[1] TELSEM 19V= 1.333
+[1] TELSEM 37V= 1.558
+[1] TELSEM 89V= 3.032
+[1] ""
+[1] TELSEM 10H= 2.482
+[1] TELSEM 19H= 1.943
+[1] TELSEM 37H= 2.115
+[1] TELSEM 89H= 3.582
+
