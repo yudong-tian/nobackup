@@ -1,4 +1,19 @@
 
+7/22/2016:
+  Changed /home/ytian/7.0-development/interp/compute_grid_coord_latlon.F90: 
+L86-88:
+             !YDT 7/22/16: causing problem for rlon in (0, 360) range
+             !YDT xpts(n)=1+(rlon(n)-360-rlon1)/dlon
+             xpts(n) = 1+(rlon(n)-rlon1)/dlon
+
+and now the forcing variables look fine. 
+
+
+Further testing: 
+  It showed that the first row of the interpolated forcing data for some of the variables (tmp, psurf, etc)
+is all -9999 values. This will crash the physics code down the road. Investigating. 
+
+
 7/15/2016:
   Kristi helped with the ldt.config file in 
 /discover/nobackup/ytian/7.0/test-gdas/development/run-noah36-1-deg
