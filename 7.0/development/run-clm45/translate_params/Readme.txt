@@ -16,6 +16,13 @@ SURFACETYPE: a 0/1 mask of (i, j, vtype)
 LANDCOVER:   a weight of (i, j, vtype)   
 
 These two fields were filled by intercepting a live CESM run for now: 
+
+ cd /home/ytian/CESM/LIS-CLM4.5SP/pio-xlis-bld/
+ mpirun -np 1 ./single_col
+
+[the run will soon crash, but after the data having been saved.]
+
+The code: 
   
 /home/ytian/CESM/LIS-CLM4.5SP/pio-xlis-bld/single_col.F90
 

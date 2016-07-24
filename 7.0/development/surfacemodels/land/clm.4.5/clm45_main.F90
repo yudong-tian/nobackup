@@ -135,8 +135,8 @@ if(alarmCheck) then
       l=pft%landunit(k) 
       g=pft%gridcell(k) 
 
-     write(LIS_logunit, '(A, I6, A, F10.4, A, F10.4)') 'k=', k, ' pef%fsa(k)=', pef%fsa(k), &
-           ' pef%eflx_lwrad_net(k)=', pef%eflx_lwrad_net(k)
+     !write(LIS_logunit, '(A, I6, A, F10.4, A, F10.4)') 'k=', k, ' pef%fsa(k)=', pef%fsa(k), &
+     !      ' pef%eflx_lwrad_net(k)=', pef%eflx_lwrad_net(k)
 
      call LIS_diagnoseSurfaceOutputVar(n, k, LIS_MOC_SWNET, &
           value= n2u( pef%fsa(k) ), &
@@ -179,6 +179,17 @@ if(alarmCheck) then
           value= tmp1 / (tmp1 + tmp2) , vlevel=1,unit="-", &
           direction="-",surface_type=LIS_rc%lsm_index)
      endif
+
+     ! forcing 
+     call LIS_diagnoseSurfaceOutputVar(n,k,LIS_MOC_PSURFFORC,&
+          value=n2u( clm_a2l%forc_pbot(g) ), &
+          vlevel=1,unit="Pa", direction="-",surface_type=LIS_rc%lsm_index)
+     call LIS_diagnoseSurfaceOutputVar(n,k,LIS_MOC_SWDOWNFORC,&
+          value=n2u( clm_a2l%forc_solar(g) ), &
+          vlevel=1,unit="W/m2", direction="DN",surface_type=LIS_rc%lsm_index)
+     call LIS_diagnoseSurfaceOutputVar(n,k,LIS_MOC_LWDOWNFORC,&
+          value=n2u( clm_a2l%forc_lwrad(g) ), &
+          vlevel=1,unit="W/m2", direction="DN",surface_type=LIS_rc%lsm_index)
 
      call LIS_diagnoseSurfaceOutputVar(n,k,LIS_MOC_TOTALPRECIP,&
           value=n2u( clm_a2l%forc_snow(g) + clm_a2l%forc_rain(g) ), &

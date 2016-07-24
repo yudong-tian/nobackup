@@ -486,6 +486,11 @@ contains
           ! Quasi-laminar layer resistance: call rss_lmn_get
           ! Size-independent thermokinetic properties
           
+          !YDT debug 
+          !write(*, *) 'DUSTMod.F90: g=', g, ' p=', p, ' forc_t(g)=', forc_t(g), &  
+          !            ' clm_a2l%forc_t(g)=', clm_a2l%forc_t(g), &
+          !            ' clm_a2l%forc_pbot(g)=', clm_a2l%forc_pbot(g)
+
           vsc_dyn_atm(p) = 1.72e-5_r8 * ((forc_t(g)/273.0_r8)**1.5_r8) * 393.0_r8 / &
                (forc_t(g)+120.0_r8)      ![kg m-1 s-1] RoY94 p. 102
           mfp_atm = 2.0_r8 * vsc_dyn_atm(p) / &   ![m] SeP97 p. 455

@@ -158,6 +158,9 @@ subroutine clm45_f2t(n)
 !  do t=1,LIS_rc%npatch(n,LIS_rc%lsm_index)
 !     g=LIS_surface(n,LIS_rc%lsm_index)%tile(t)%tile_id  
 
+!YDT 
+  write(*, *) "clm45_f2t is called  p                 g"
+  write(*, *) "============================="
   do p= begp, endp 
 
       c=pft%column(p)
@@ -181,11 +184,16 @@ subroutine clm45_f2t(n)
 
 
      if(LIS_FORC_Tair%selectOpt.eq.1) then
+
        clm_a2l%forc_t(g)=tmp(p)
        clm_a2l%forc_th(g)=tmp(p)  !YDT temp fix 
+
+       !YDT debug
+       !write(*, *) 'p=', p, ' pft%active(p)=', pft%active(p), ' g=',  g, ' clm_a2l%forc_t(g)=', clm_a2l%forc_t(g)
+
      else ! what values to take?  
-       clm_a2l%forc_t(g)=0.
-       clm_a2l%forc_th(g)=0.
+       clm_a2l%forc_t(g)=tmp(p) 
+       clm_a2l%forc_th(g)=tmp(p)
      endif
      if(LIS_FORC_Qair%selectOpt.eq.1) then
        clm_a2l%forc_q(g)=q2(p)
@@ -242,11 +250,20 @@ subroutine clm45_f2t(n)
   allocate(tile_var( LIS_rc%npatch(n,LIS_rc%lsm_index)) )
   Do t=1, LIS_rc%npatch(n,LIS_rc%lsm_index)
      g=pft%gridcell(t)
-     tile_var(t) = n2u( clm_a2l%forc_solar(g) )
+     tile_var(t) = n2u( clm_a2l%forc_pbot(g) )
   End Do 
   ftn = LIS_getNextUnitNumber()
-  open(ftn, file="forc_solar.1gdr4", access="sequential", form="unformatted") 
-  call LIS_writevar_bin(ftn, n, tile_var ) 
+  open(ftn, file="forc_f2t.9gdr4", access="sequential", form="unformatted") 
+  call LIS_writevar_bin(ftn, n, swd )
+  call LIS_writevar_bin(ftn, n, lwd )
+  call LIS_writevar_bin(ftn, n, pcp )
+  call LIS_writevar_bin(ftn, n, cpcp )
+  call LIS_writevar_bin(ftn, n, tmp)
+  call LIS_writevar_bin(ftn, n, q2)
+  call LIS_writevar_bin(ftn, n, uwind)
+  call LIS_writevar_bin(ftn, n, vwind)
+  call LIS_writevar_bin(ftn, n, psurf)
+  call flush(ftn)
   call LIS_releaseUnitNumber(ftn)
   deallocate(tile_var) 
 

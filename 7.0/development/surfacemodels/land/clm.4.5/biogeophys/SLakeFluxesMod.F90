@@ -537,6 +537,10 @@ contains
           thvstar=tstar*(1._r8+0.61_r8*forc_q(g)) + 0.61_r8*forc_th(g)*qstar
           zeta=zldis(p)*vkc * grav*thvstar/(ustar(p)**2*thv(c))
 
+!YDT
+!   write(*, *) 'forc_q(g)=', forc_q(g), ' thvstar=', thvstar, ' forc_th(g)=', forc_th(g), ' ustar(p)=', ustar(p)  
+!   write(*, *) 'tstar=', tstar, ' qstar=', qstar
+
           if (zeta >= 0._r8) then     !stable
              zeta = min(2._r8,max(zeta,0.01_r8))
              um(p) = max(ur(p),0.1_r8)

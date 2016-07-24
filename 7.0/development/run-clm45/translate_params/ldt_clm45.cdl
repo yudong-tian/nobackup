@@ -17,13 +17,15 @@ dimensions:
         east_west_GDAS_T1534 = 3072 ;
         north_south_GDAS_T1534 = 1536 ;
         month = 12 ;
-        time = 1 ;
-        sfctypes = 14 ;
+        time = 12 ;
+        sfctypes = 36 ;
         soilfracbins = 1 ;
         elevbins = 1 ;
 
         ncorners = 4; 
 
+        lsmlon = 288 ;
+        lsmlat = 192 ;
 	nglcec = 10 ;
 	nglcecp1 = 11 ;
 	numurbl = 3 ;
@@ -34,7 +36,6 @@ dimensions:
 	lsmpft = 17 ;
 
 variables:
-        float time(time) ;
   double xc(north_south, east_west) ;
                 xc:standard_name = "xc" ;
                 xc:units = "" ;
@@ -98,6 +99,24 @@ variables:
                 frac:vmin = 0.f ;
                 frac:vmax = 0.f ;
                 frac:num_bins = 1 ;
+        float SURFACETYPE(sfctypes, north_south, east_west) ;
+                SURFACETYPE:standard_name = "Surface type" ;
+                SURFACETYPE:units = "-" ;
+                SURFACETYPE:scale_factor = 1.f ;
+                SURFACETYPE:add_offset = 0.f ;
+                SURFACETYPE:missing_value = -9999.f ;
+                SURFACETYPE:vmin = 0.f ;
+                SURFACETYPE:vmax = 0.f ;
+                SURFACETYPE:num_bins = 36 ;
+        float LANDCOVER(sfctypes, north_south, east_west) ;
+                LANDCOVER:standard_name = "AVHRR UMD landcover map" ;
+                LANDCOVER:units = "" ;
+                LANDCOVER:scale_factor = 1.f ;
+                LANDCOVER:add_offset = 0.f ;
+                LANDCOVER:missing_value = -9999.f ;
+                LANDCOVER:vmin = 0.f ;
+                LANDCOVER:vmax = 0.f ;
+                LANDCOVER:num_bins = 36 ;
   int mxsoil_color ;
                 mxsoil_color:standard_name = "mxsoil_color" ;
                 mxsoil_color:units = "" ;
@@ -791,21 +810,96 @@ variables:
                 URBAN_REGION_ID:vmin = 0.f ;
                 URBAN_REGION_ID:vmax = 0.f ;
                 URBAN_REGION_ID:num_bins = 1 ;
+        float lat(north_south, east_west) ;
+                lat:standard_name = "latitude" ;
+                lat:units = "degrees_north" ;
+                lat:scale_factor = 1.f ;
+                lat:add_offset = 0.f ;
+                lat:missing_value = -9999.f ;
+                lat:vmin = 0.f ;
+                lat:vmax = 0.f ;
+        float lon(north_south, east_west) ;
+                lon:standard_name = "longitude" ;
+                lon:units = "degrees_east" ;
+                lon:scale_factor = 1.f ;
+                lon:add_offset = 0.f ;
+                lon:missing_value = -9999.f ;
+                lon:vmin = 0.f ;
+                lon:vmax = 0.f ;
+        float lat_b(north_south_b, east_west_b) ;
+                lat_b:standard_name = "latitude_b" ;
+                lat_b:units = "degrees_north" ;
+                lat_b:scale_factor = 1.f ;
+                lat_b:add_offset = 0.f ;
+                lat_b:missing_value = -9999.f ;
+                lat_b:vmin = 0.f ;
+                lat_b:vmax = 0.f ;
+        float lon_b(north_south_b, east_west_b) ;
+                lon_b:standard_name = "longitude_b" ;
+                lon_b:units = "degrees_east" ;
+                lon_b:scale_factor = 1.f ;
+                lon_b:add_offset = 0.f ;
+                lon_b:missing_value = -9999.f ;
+                lon_b:vmin = 0.f ;
+                lon_b:vmax = 0.f ;
+
 // global attributes:
 		:MAP_PROJECTION = "EQUIDISTANT CYLINDRICAL" ;
-		:SOUTH_WEST_CORNER_LAT = -90.0f ;
-		:SOUTH_WEST_CORNER_LON = 0.0f ;
+		:SOUTH_WEST_CORNER_LAT = -89.5290f ;
+		:SOUTH_WEST_CORNER_LON = 0.625f ;
 		:DX = 1.25f ;
 		:DY = 0.942f ;
+                :MAP_PROJECTION_GDAS_T126 = "GAUSSIAN" ;
+                :NORTH_WEST_CORNER_LAT_GDAS_T126 = 89.277f ;
+                :NORTH_WEST_CORNER_LON_GDAS_T126 = 0.f ;
+                :SOUTH_EAST_CORNER_LAT_GDAS_T126 = -89.277f ;
+                :SOUTH_EAST_CORNER_LON_GDAS_T126 = -0.938f ;
+                :DI_GDAS_T126 = 0.938f ;
+                :N_GDAS_T126 = 95.f ;
+                :MAP_PROJECTION_GDAS_T170 = "GAUSSIAN" ;
+                :NORTH_WEST_CORNER_LAT_GDAS_T170 = 89.463f ;
+                :NORTH_WEST_CORNER_LON_GDAS_T170 = 0.f ;
+                :SOUTH_EAST_CORNER_LAT_GDAS_T170 = -89.463f ;
+                :SOUTH_EAST_CORNER_LON_GDAS_T170 = -0.703f ;
+                :DI_GDAS_T170 = 0.703f ;
+                :N_GDAS_T170 = 128.f ;
+                :MAP_PROJECTION_GDAS_T254 = "GAUSSIAN" ;
+                :NORTH_WEST_CORNER_LAT_GDAS_T254 = 89.642f ;
+                :NORTH_WEST_CORNER_LON_GDAS_T254 = 0.f ;
+                :SOUTH_EAST_CORNER_LAT_GDAS_T254 = -89.642f ;
+                :SOUTH_EAST_CORNER_LON_GDAS_T254 = -0.469f ;
+                :DI_GDAS_T254 = 0.469f ;
+                :N_GDAS_T254 = 192.f ;
+                :MAP_PROJECTION_GDAS_T382 = "GAUSSIAN" ;
+                :NORTH_WEST_CORNER_LAT_GDAS_T382 = 89.761f ;
+                :NORTH_WEST_CORNER_LON_GDAS_T382 = 0.f ;
+                :SOUTH_EAST_CORNER_LAT_GDAS_T382 = -89.761f ;
+                :SOUTH_EAST_CORNER_LON_GDAS_T382 = -0.313f ;
+                :DI_GDAS_T382 = 0.313f ;
+                :N_GDAS_T382 = 288.f ;
+                :MAP_PROJECTION_GDAS_T574 = "GAUSSIAN" ;
+                :NORTH_WEST_CORNER_LAT_GDAS_T574 = 89.844f ;
+                :NORTH_WEST_CORNER_LON_GDAS_T574 = 0.f ;
+                :SOUTH_EAST_CORNER_LAT_GDAS_T574 = -89.844f ;
+                :SOUTH_EAST_CORNER_LON_GDAS_T574 = -0.205f ;
+                :DI_GDAS_T574 = 0.205f ;
+                :N_GDAS_T574 = 440.f ;
+                :MAP_PROJECTION_GDAS_T1534 = "GAUSSIAN" ;
+                :NORTH_WEST_CORNER_LAT_GDAS_T1534 = 89.91f ;
+                :NORTH_WEST_CORNER_LON_GDAS_T1534 = 0.f ;
+                :SOUTH_EAST_CORNER_LAT_GDAS_T1534 = -89.91f ;
+                :SOUTH_EAST_CORNER_LON_GDAS_T1534 = -0.1171875f ;
+                :DI_GDAS_T1534 = 0.1171875f ;
+                :N_GDAS_T1534 = 768.f ;
 		:INC_WATER_PTS = "false" ;
-		:LANDCOVER_SCHEME = "UMD" ;
-		:BARESOILCLASS = 12 ;
-		:URBANCLASS = 13 ;
+		:LANDCOVER_SCHEME = "CESM" ;
+		:BARESOILCLASS = 1 ;
+		:URBANCLASS = 0 ;
 		:SNOWCLASS = 0 ;
-		:WATERCLASS = 14 ;
+		:WATERCLASS = 36 ;
 		:WETLANDCLASS = 0 ;
 		:GLACIERCLASS = 0 ;
-		:NUMVEGTYPES = 13 ;
+		:NUMVEGTYPES = 35 ;
 		:LANDMASK_SOURCE = "AVHRR" ;
 		:SFCMODELS = "CLM.4.5" ;
 		:SOILTEXT_SCHEME = "Soil texture not selected" ;
@@ -815,3 +909,10 @@ variables:
 		:history = "created on date: 2015-09-14T12:32:09.195" ;
 		:references = "Kumar_etal_EMS_2006, Peters-Lidard_etal_ISSE_2007" ;
 		:comment = "website: http://lis.gsfc.nasa.gov/" ;
+data:
+
+ mxsoil_color = 20 ;
+
+ month = 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 ;
+
+}

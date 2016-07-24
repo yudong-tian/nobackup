@@ -2,10 +2,12 @@
 # show the coordicates of the LL and UP grid boxes 
 
 nc=288
-nr=192
+#nr=192
+nr=160
 
 x0=-180
-y0=-90 
+#y0=-90 
+y0=-60 
 
 dx=1.25
 dy=0.942

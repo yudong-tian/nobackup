@@ -142,8 +142,8 @@ cat >> $cdlf <<EOF3
 
 // global attributes:
 		:MAP_PROJECTION = "EQUIDISTANT CYLINDRICAL" ;
-		:SOUTH_WEST_CORNER_LAT = -90.0f ;
-		:SOUTH_WEST_CORNER_LON = 0.0f ;
+		:SOUTH_WEST_CORNER_LAT = -89.5290f ;
+		:SOUTH_WEST_CORNER_LON = 0.625f ;
 		:DX = 1.25f ;
 		:DY = 0.942f ;
                 :MAP_PROJECTION_GDAS_T126 = "GAUSSIAN" ;
